@@ -1,0 +1,82 @@
+name: NICK OS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, production ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Lint, Test & Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Static Analysis & Lint
+        run: npm run lint
+
+      - name: Execute Full Test Strategy (Unit, Integration, E2E, Notifications, Background)
+        run: npm test
+
+  build:
+    name: Production Full-Stack Build
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Production Bundle (Vite SPA + esbuild Server)
+        run: npm run build
+
+      - name: Verify Production Artifacts
+        run: |
+          test -f dist/index.html || (echo "Missing dist/index.html" && exit 1)
+          test -f dist/server.cjs || (echo "Missing dist/server.cjs" && exit 1)
+          echo "Production artifacts verified successfully."
+
+  docker:
+    name: Container Build Verification
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (Local Dry-run)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: nick-os:latest

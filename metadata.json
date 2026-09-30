@@ -1,0 +1,6 @@
+{
+  "name": "NICK OS",
+  "description": "A high-accountability personal execution operating system for Nick.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
