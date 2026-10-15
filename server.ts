@@ -142,7 +142,7 @@ ${JSON.stringify(context, null, 2)}
 Provide an upgraded, highly optimal PlanningProposal for today. Ensure the suggested schedule uses existing high-priority tasks, incorporates buffers according to his capacity patterns, and accounts for his estimation bias. The suggested start and end times should reflect realistic execution windows.`;
 
     const response = await ai!.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -216,7 +216,7 @@ ${JSON.stringify(context, null, 2)}
 Provide structured explanation, first physical action, and focus tips.`;
 
     const response = await ai!.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -268,7 +268,7 @@ Description: ${taskDescription || "None provided"}
 Output a list of concrete checklist sub-tasks, each representing a clear physical micro-deliverable.`;
 
     const response = await ai!.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -321,7 +321,7 @@ Blocker Details: ${blockerReason || "Don't know where to start"}
 Provide structured instructions to unblock immediately.`;
 
     const response = await ai!.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -374,7 +374,7 @@ ${JSON.stringify(context, null, 2)}
 Formulate a replanned schedule proposal for the rest of the day.`;
 
     const response = await ai!.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -506,6 +506,145 @@ app.post("/api/notifications/sync-scheduler", (req, res) => {
     currentTimeStr
   );
   res.json({ success: true, generated });
+});
+
+// ============================================================================
+// FOCUS GUARD ENGINE & SYNC ENDPOINTS
+// ============================================================================
+let serverFocusGuardSettings = {
+  enabled: true,
+  mode: 'blacklist',
+  allowedDomains: ['nickos.ai.studio', 'ai.studio', 'github.com', 'google.com', 'stackoverflow.com', 'docs.google.com'],
+  blockedDomains: ['youtube.com', 'x.com', 'twitter.com', 'reddit.com', 'facebook.com', 'instagram.com', 'tiktok.com'],
+  blockedApps: ['Discord.exe', 'Steam.exe', 'Spotify.exe', 'League of Legends.exe'],
+  unknownSitePolicy: 'allow',
+  updatedAt: new Date().toISOString(),
+};
+
+let serverActiveFocusSession: {
+  sessionId: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  status: 'active' | 'paused' | 'completed' | 'abandoned' | 'disconnected';
+  startTime: string | null;
+  lastSyncAt: string | null;
+} = {
+  sessionId: null,
+  taskId: null,
+  taskTitle: null,
+  status: 'disconnected',
+  startTime: null,
+  lastSyncAt: null,
+};
+
+const serverAgentHeartbeats = new Map<string, {
+  clientId: string;
+  clientType: 'browser_extension' | 'windows_agent';
+  version: string;
+  status: 'connected' | 'enforcing' | 'paused' | 'error' | 'disconnected';
+  activeSessionId?: string | null;
+  blockedEnforcementsCount: number;
+  lastActionLog?: string;
+  errorMessage?: string;
+  lastHeartbeatAt: string;
+}>();
+
+app.get("/api/focus-guard/settings", (req, res) => {
+  res.json(serverFocusGuardSettings);
+});
+
+app.post("/api/focus-guard/settings", (req, res) => {
+  if (req.body && typeof req.body === 'object') {
+    serverFocusGuardSettings = {
+      ...serverFocusGuardSettings,
+      ...req.body,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  res.json({ success: true, settings: serverFocusGuardSettings });
+});
+
+app.post("/api/focus-guard/session-sync", (req, res) => {
+  const { sessionId, taskId, taskTitle, status, startTime } = req.body || {};
+  serverActiveFocusSession = {
+    sessionId: sessionId || null,
+    taskId: taskId || null,
+    taskTitle: taskTitle || null,
+    status: status || 'disconnected',
+    startTime: startTime || null,
+    lastSyncAt: new Date().toISOString(),
+  };
+  res.json({ success: true, session: serverActiveFocusSession });
+});
+
+app.get("/api/focus-guard/active-session", (req, res) => {
+  // Check session freshness
+  const now = Date.now();
+  const lastSyncTime = serverActiveFocusSession.lastSyncAt ? new Date(serverActiveFocusSession.lastSyncAt).getTime() : 0;
+  let sessionState = serverActiveFocusSession.status;
+  
+  // If no sync received in 60s and session was active, mark degraded
+  if (sessionState === 'active' && now - lastSyncTime > 60000) {
+    sessionState = 'disconnected';
+  }
+
+  const isProtectionActive = serverFocusGuardSettings.enabled && sessionState === 'active';
+
+  // Get active heartbeats
+  const cutoff = now - 45000;
+  const agentsList = Array.from(serverAgentHeartbeats.values()).map(ag => {
+    const last = new Date(ag.lastHeartbeatAt).getTime();
+    if (isNaN(last) || last < cutoff) {
+      return { ...ag, status: 'disconnected' as const };
+    }
+    return ag;
+  });
+
+  res.json({
+    isProtectionActive,
+    sessionState,
+    sessionId: serverActiveFocusSession.sessionId,
+    taskId: serverActiveFocusSession.taskId,
+    taskTitle: serverActiveFocusSession.taskTitle,
+    startTime: serverActiveFocusSession.startTime,
+    settings: serverFocusGuardSettings,
+    agents: agentsList,
+  });
+});
+
+app.post("/api/focus-guard/heartbeat", (req, res) => {
+  const { clientId, clientType, version, status, activeSessionId, blockedEnforcementsCount, lastActionLog, errorMessage } = req.body || {};
+  
+  if (!clientId || !clientType) {
+    return res.status(400).json({ error: "MISSING_CLIENT_PARAMS", message: "clientId and clientType are required" });
+  }
+
+  const record = {
+    clientId: String(clientId),
+    clientType: clientType === 'windows_agent' ? ('windows_agent' as const) : ('browser_extension' as const),
+    version: String(version || '1.0.0'),
+    status: (status || 'connected') as any,
+    activeSessionId: activeSessionId || null,
+    blockedEnforcementsCount: Number(blockedEnforcementsCount || 0),
+    lastActionLog: lastActionLog ? String(lastActionLog) : undefined,
+    errorMessage: errorMessage ? String(errorMessage) : undefined,
+    lastHeartbeatAt: new Date().toISOString(),
+  };
+
+  serverAgentHeartbeats.set(clientId, record);
+  res.json({ success: true, heartbeat: record });
+});
+
+app.get("/api/focus-guard/agents", (req, res) => {
+  const cutoff = Date.now() - 45000;
+  const list = Array.from(serverAgentHeartbeats.values()).map(ag => {
+    const last = new Date(ag.lastHeartbeatAt).getTime();
+    if (isNaN(last) || last < cutoff) {
+      return { ...ag, status: 'disconnected' as const };
+    }
+    return ag;
+  });
+  res.json({ agents: list });
 });
 
 // ============================================================================

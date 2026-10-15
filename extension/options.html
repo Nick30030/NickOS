@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NickOS Focus Guard Options</title>
+  <style>
+    body { background: #0a0a0a; color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; max-width: 500px; margin: 40px auto; padding: 20px; border: 1px solid #262626; border-radius: 12px; }
+    h1 { font-size: 18px; color: #10b981; margin-bottom: 8px; }
+    p { font-size: 12px; color: #a3a3a3; margin-bottom: 20px; }
+    .group { margin-bottom: 16px; }
+    label { font-size: 11px; text-transform: uppercase; font-weight: bold; color: #a3a3a3; display: block; margin-bottom: 6px; }
+    input[type="text"] { width: 100%; padding: 10px; background: #171717; border: 1px solid #262626; border-radius: 8px; color: #fff; font-size: 12px; font-family: monospace; }
+    button { padding: 10px 16px; background: #10b981; color: #052e16; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; }
+    button:hover { background: #34d399; }
+    .msg { margin-top: 10px; font-size: 11px; color: #34d399; display: none; }
+  </style>
+</head>
+<body>
+  <h1>NickOS Focus Guard Options</h1>
+  <p>Configure extension connection endpoints and diagnostic parameters.</p>
+
+  <div class="group">
+    <label>NickOS Server API Endpoint</label>
+    <input type="text" id="serverUrlInput" value="https://nickos.ai.studio">
+  </div>
+
+  <button id="saveBtn">Save Configuration</button>
+  <div id="msg" class="msg">Configuration updated successfully.</div>
+
+  <script src="options.js"></script>
+</body>
+</html>

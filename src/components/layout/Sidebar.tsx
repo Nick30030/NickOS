@@ -1,6 +1,7 @@
 import React from 'react';
 import { useExecution } from '../../context/ExecutionContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { APP_CONFIG } from '../../config/app.config';
 import { NavigationTab } from '../../types/domain';
 import {
@@ -21,6 +22,9 @@ import {
   Shield,
   ShieldCheck,
   BrainCircuit,
+  HelpCircle,
+  Compass,
+  Globe,
 } from 'lucide-react';
 import { formatSecondsToTimer } from '../../lib/utils';
 
@@ -35,6 +39,13 @@ const ICON_MAP: Record<NavigationTab, React.ComponentType<{ className?: string }
   analytics: BarChart3,
   ai: BrainCircuit,
   settings: Settings,
+  help: HelpCircle,
+  command: LayoutDashboard,
+  vision: Compass,
+  objectives: FolderKanban,
+  execution: Crosshair,
+  evolution: ShieldCheck,
+  tools: Settings,
 };
 
 export const Sidebar: React.FC<{
@@ -54,6 +65,7 @@ export const Sidebar: React.FC<{
   } = useExecution();
 
   const { theme, toggleTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
 
   const handleNav = (tabId: NavigationTab) => {
     setActiveTab(tabId);
@@ -114,7 +126,7 @@ export const Sidebar: React.FC<{
                       isActive ? 'text-emerald-400' : 'text-neutral-400 group-hover:text-neutral-300'
                     }`}
                   />
-                  <span>{item.label}</span>
+                  <span>{t(item.id) || item.label}</span>
                 </div>
 
                 {badgeText && (
@@ -147,7 +159,7 @@ export const Sidebar: React.FC<{
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                EXECUTION COCKPIT
+                {t('nowCockpitHeader', 'EXECUTION COCKPIT')}
               </span>
               <span className="font-mono text-xs font-bold text-neutral-100">
                 {formatSecondsToTimer(timerElapsedSeconds)}
@@ -155,7 +167,7 @@ export const Sidebar: React.FC<{
             </div>
             <p className="text-neutral-200 font-medium truncate">{activeTask.title}</p>
             <div className="flex items-center justify-between pt-1 text-[11px] text-neutral-400 font-mono">
-              <span>{activeTask.estimatedMinutes}m target</span>
+              <span>{activeTask.estimatedMinutes}m {t('plannedTime', 'target')}</span>
               <button
                 type="button"
                 onClick={e => {
@@ -177,10 +189,43 @@ export const Sidebar: React.FC<{
         >
           <div className="flex items-center gap-2">
             <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{storageMode === 'supabase' ? 'Supabase Sync' : 'Local-First DB'}</span>
+            <span>{storageMode === 'supabase' ? t('supabaseSync', 'Supabase Sync') : t('localDb', 'Local-First DB')}</span>
           </div>
           <span className="text-[10px] text-neutral-400">Config</span>
         </button>
+
+        {/* Sovereign Language Selector - ONLY in the vertical sidebar */}
+        <div className="space-y-1.5 pt-1">
+          <div className="flex items-center justify-between px-1 text-[10px] font-mono text-neutral-400">
+            <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-neutral-300">
+              <Globe className="w-3 h-3 text-emerald-400" />
+              {t('language', 'Langue')}
+            </span>
+            <span className="text-emerald-400 uppercase font-bold">{language}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1 p-1 bg-neutral-950/80 rounded-xl border border-neutral-800 text-[11px] font-mono">
+            {[
+              { code: 'fr', label: 'FR', title: 'Français' },
+              { code: 'en', label: 'EN', title: 'English' },
+              { code: 'es', label: 'ES', title: 'Español' },
+              { code: 'zh', label: '中文', title: '中文' },
+            ].map(l => (
+              <button
+                key={l.code}
+                type="button"
+                onClick={() => setLanguage(l.code as any)}
+                title={l.title}
+                className={`py-1 rounded-lg text-center transition-all cursor-pointer font-bold ${
+                  language === l.code
+                    ? 'bg-emerald-500 text-neutral-950 shadow-xs'
+                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* User Nick Badge & Theme Toggle */}
         <div className="flex items-center justify-between px-1 py-1">
@@ -197,7 +242,7 @@ export const Sidebar: React.FC<{
           <button
             onClick={toggleTheme}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors cursor-pointer"
-            title="Toggle Dark / Light Theme"
+            title={t('toggleTheme', 'Toggle Dark / Light Theme')}
           >
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>

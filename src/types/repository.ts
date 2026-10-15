@@ -14,6 +14,7 @@ import {
   InboxItemStatus,
   AiProposal,
 } from './domain';
+import { FocusGuardSettings, FocusGuardAgentHeartbeat } from './focus';
 
 export interface FilterOptions {
   status?: string;
@@ -103,4 +104,10 @@ export interface IExecutionRepository {
   getAiProposals(): Promise<AiProposal[]>;
   createAiProposal(proposal: Omit<AiProposal, 'id' | 'createdAt'>): Promise<AiProposal>;
   updateAiProposal(id: string, updates: Partial<AiProposal>): Promise<AiProposal>;
+
+  // 12. Focus Guard Settings & Agent Heartbeats
+  getFocusGuardSettings(): Promise<FocusGuardSettings>;
+  saveFocusGuardSettings(settings: Partial<FocusGuardSettings>): Promise<FocusGuardSettings>;
+  recordAgentHeartbeat(heartbeat: FocusGuardAgentHeartbeat): Promise<FocusGuardAgentHeartbeat>;
+  getAgentHeartbeats(): Promise<FocusGuardAgentHeartbeat[]>;
 }

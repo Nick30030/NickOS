@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useExecution } from '../../context/ExecutionContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { PriorityBadge, StatusBadge } from '../common/Badge';
@@ -39,6 +40,7 @@ export const ProjectsView: React.FC = () => {
     startFocusSession,
     setActiveTab,
   } = useExecution();
+  const { t } = useLanguage();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -89,10 +91,10 @@ export const ProjectsView: React.FC = () => {
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-100 flex items-center gap-2.5 break-words">
             <FolderKanban className="w-7 h-7 text-emerald-400 shrink-0" />
-            Active Project Registry
+            {t('projectsHeader', 'Projets & Portefeuille Opérationnel')}
           </h1>
           <p className="text-xs sm:text-sm text-neutral-400 font-mono mt-1.5 leading-relaxed break-words">
-            Execution initiatives grouped by strategic domain with concrete deliverables.
+            {t('projectsSubtitle', 'Gérez vos projets actifs, jalons critiques et liens vers vos objectifs stratégiques.')}
           </p>
         </div>
 
@@ -103,7 +105,7 @@ export const ProjectsView: React.FC = () => {
           icon={<Plus className="w-4 h-4" />}
           className="rounded-xl"
         >
-          New Project
+          {t('newProject', 'Nouveau Projet')}
         </Button>
       </div>
 
@@ -112,11 +114,11 @@ export const ProjectsView: React.FC = () => {
         {/* Status Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto p-1.5 bg-neutral-950 rounded-2xl border border-neutral-800 text-xs">
           {[
-            { id: 'all', label: 'All Projects' },
-            { id: 'active', label: 'Active' },
-            { id: 'on_hold', label: 'On Hold' },
-            { id: 'completed', label: 'Completed' },
-            { id: 'archived', label: 'Archived' },
+            { id: 'all', label: t('all', 'Tous les projets') },
+            { id: 'active', label: t('activeProjects', 'Actifs') },
+            { id: 'on_hold', label: t('pausedProjects', 'En pause') },
+            { id: 'completed', label: t('completedProjects', 'Terminés') },
+            { id: 'archived', label: t('archivedProjects', 'Archivés') },
           ].map(tab => (
             <button
               key={tab.id}
@@ -139,11 +141,11 @@ export const ProjectsView: React.FC = () => {
             onChange={e => setPriorityFilter(e.target.value)}
             className="rounded-xl bg-neutral-950 border border-neutral-800 px-3.5 py-2 text-xs text-neutral-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
-            <option value="all">All Priorities</option>
-            <option value="critical">🔴 Critical</option>
-            <option value="high">🟠 High</option>
-            <option value="medium">🔵 Medium</option>
-            <option value="low">⚪ Low</option>
+            <option value="all">{t('allPriorities', 'Toutes les priorités')}</option>
+            <option value="critical">🔴 {t('criticalPriority', 'Critique')}</option>
+            <option value="high">🟠 {t('highPriority', 'Élevée')}</option>
+            <option value="medium">🔵 {t('mediumPriority', 'Moyenne')}</option>
+            <option value="low">⚪ {t('lowPriority', 'Basse')}</option>
           </select>
 
           {/* Search Input */}
@@ -151,7 +153,7 @@ export const ProjectsView: React.FC = () => {
             <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
             <input
               type="text"
-              placeholder="Search projects..."
+              placeholder={t('searchPlaceholder', 'Rechercher par nom, code...')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full rounded-xl bg-neutral-950 border border-neutral-800 pl-9 pr-3.5 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-emerald-500 font-mono"
@@ -164,7 +166,7 @@ export const ProjectsView: React.FC = () => {
       {filteredProjects.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
-          title={searchQuery || statusFilter !== 'all' ? 'No matching projects found' : 'No projects registered'}
+          title={t('noProjectsFound', 'No matching projects found')}
           description={
             searchQuery || statusFilter !== 'all'
               ? 'Try clearing search or changing the filter options.'
@@ -177,7 +179,7 @@ export const ProjectsView: React.FC = () => {
               onClick={() => openCreateProjectModal()}
               leftIcon={<Plus className="w-4 h-4" />}
             >
-              Create New Project
+              {t('newProject', 'Nouveau Projet')}
             </Button>
           }
         />

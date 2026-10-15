@@ -14,6 +14,7 @@ const DEFAULT_PREFS: VoicePreferences = {
   rate: 1.0,
   pitch: 1.0,
   language: 'en-US',
+  selectedVoiceURI: '',
 };
 
 export class VoiceService {
@@ -110,9 +111,15 @@ export class VoiceService {
 
         // Try to match specific preferred voice if possible
         const voices = window.speechSynthesis.getVoices();
-        const preferredVoice = voices.find(v => v.lang.startsWith(this.preferences.language));
-        if (preferredVoice) {
-          utterance.voice = preferredVoice;
+        let chosenVoice = null;
+        if (this.preferences.selectedVoiceURI) {
+          chosenVoice = voices.find(v => v.voiceURI === this.preferences.selectedVoiceURI);
+        }
+        if (!chosenVoice) {
+          chosenVoice = voices.find(v => v.lang.startsWith(this.preferences.language));
+        }
+        if (chosenVoice) {
+          utterance.voice = chosenVoice;
         }
 
         utterance.onend = () => {
@@ -177,7 +184,7 @@ export class VoiceService {
    * Example: "Next task: implement workspace navigation. You have 45 minutes."
    * Implemented with IDEMPOTENCY to prevent announcing the same task multiple times.
    */
-  public static announceTaskTransition(taskId: string, title: string, durationMinutes: number, outcome?: string, force = false): void {
+  public static async announceTaskTransition(taskId: string, title: string, durationMinutes: number, outcome?: string, priority?: 'low' | 'medium' | 'high' | 'critical', force = false): Promise<void> {
     const prefs = this.preferences;
     if (!prefs.voiceEnabled || !prefs.taskStartAnnounceEnabled) return;
 
@@ -189,12 +196,19 @@ export class VoiceService {
 
     this.lastAnnouncedTaskId = taskId;
 
-    let text = `Nick, it is time to work on: ${title}. You have ${durationMinutes} minutes.`;
-    if (outcome) {
-      text += ` The intended outcome is to: ${outcome}.`;
-    }
+    const isCritical = priority === 'critical' || priority === 'high';
+    const clipId = isCritical ? 'task_start_critical' : 'task_start_normal';
 
-    this.speak(text);
+    const success = await this.playCustomClip(clipId);
+    if (!success) {
+      let text = isCritical
+        ? `Attention Nick, start of critical task: ${title}. Let's secure this block. You have ${durationMinutes} minutes.`
+        : `Nick, it is time to work on: ${title}. You have ${durationMinutes} minutes.`;
+      if (outcome) {
+        text += ` The intended outcome is to: ${outcome}.`;
+      }
+      this.speak(text);
+    }
   }
 
   /**
@@ -251,4 +265,163 @@ export class VoiceService {
       localStorage.removeItem(LOGS_KEY);
     }
   }
+
+  // ==============================================================================
+  // REAL VOICE VAULT — CUSTOM RECORDED AUDIO ENGINE
+  // ==============================================================================
+
+  /**
+   * Retrieves all custom audio clips, merging recorded base64 data with defaults
+   */
+  public static getCustomClips(): CustomAudioClip[] {
+    const defaultClips: CustomAudioClip[] = [
+      {
+        id: 'idle_warning',
+        name: 'Alerte Agenda Vide',
+        base64Data: null,
+        description: "Déclenché le matin ou en cas d'inactivité s'il n'y a aucun programme prévu pour aujourd'hui.",
+        category: 'system'
+      },
+      {
+        id: 'task_start_normal',
+        name: 'Début de Tâche Standard',
+        base64Data: null,
+        description: "Annonce le début d'un bloc de travail normal ou à basse priorité.",
+        category: 'normal'
+      },
+      {
+        id: 'task_start_critical',
+        name: 'Début de Tâche Critique',
+        base64Data: null,
+        description: "Annonce le lancement d'une tâche critique qui demande un engagement total.",
+        category: 'critical'
+      },
+      {
+        id: 'break_ending',
+        name: 'Rappel Fin de Pause',
+        base64Data: null,
+        description: "Se déclenche lorsque le temps de pause est écoulé pour vous ramener au travail.",
+        category: 'high'
+      },
+      {
+        id: 'focus_violation',
+        name: 'Infraction Focus Guard',
+        base64Data: null,
+        description: "Se déclenche instantanément si vous tentez d'ouvrir un site ou un logiciel banni.",
+        category: 'critical'
+      },
+      {
+        id: 'task_completed',
+        name: 'Célébration Tâche Terminée',
+        base64Data: null,
+        description: "Joue un audio de récompense ou de félicitations lorsque vous marquez une tâche résolue.",
+        category: 'low'
+      }
+    ];
+
+    if (typeof window === 'undefined') return defaultClips;
+
+    try {
+      const stored = localStorage.getItem(AUDIO_VAULT_KEY);
+      if (stored) {
+        const parsedMap = JSON.parse(stored) as Record<string, string>;
+        return defaultClips.map(clip => ({
+          ...clip,
+          base64Data: parsedMap[clip.id] || null
+        }));
+      }
+    } catch (err) {
+      console.warn('[VoiceService] Failed to load audio vault:', err);
+    }
+
+    return defaultClips;
+  }
+
+  /**
+   * Save a recorded base64 audio clip to the vault
+   */
+  public static saveCustomClip(clipId: string, base64Data: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(AUDIO_VAULT_KEY);
+      const currentMap = stored ? JSON.parse(stored) : {};
+      currentMap[clipId] = base64Data;
+      localStorage.setItem(AUDIO_VAULT_KEY, JSON.stringify(currentMap));
+    } catch (err) {
+      console.warn('[VoiceService] Failed to save custom clip:', err);
+    }
+  }
+
+  /**
+   * Delete/reset a recorded audio clip
+   */
+  public static deleteCustomClip(clipId: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(AUDIO_VAULT_KEY);
+      if (stored) {
+        const currentMap = JSON.parse(stored);
+        delete currentMap[clipId];
+        localStorage.setItem(AUDIO_VAULT_KEY, JSON.stringify(currentMap));
+      }
+    } catch (err) {
+      console.warn('[VoiceService] Failed to delete custom clip:', err);
+    }
+  }
+
+  /**
+   * Play a custom clip. Returns true if played, false if fallback is needed.
+   */
+  public static playCustomClip(clipId: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') {
+        resolve(false);
+        return;
+      }
+      try {
+        const clips = this.getCustomClips();
+        const target = clips.find(c => c.id === clipId);
+        if (target && target.base64Data) {
+          const audio = new Audio(target.base64Data);
+          audio.volume = this.preferences.volume;
+          audio.onended = () => resolve(true);
+          audio.onerror = (err) => {
+            console.error('[VoiceService] Error playing custom audio:', err);
+            resolve(false);
+          };
+          audio.play().catch(e => {
+            console.warn('[VoiceService] Failed to autoplay custom clip:', e);
+            resolve(false);
+          });
+        } else {
+          resolve(false);
+        }
+      } catch (err) {
+        console.warn('[VoiceService] Exception playing custom clip:', err);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Trigger state-specific alert. Plays custom recorded voice if available, otherwise speaks fallback via TTS.
+   */
+  public static async triggerStateAlert(clipId: string, fallbackTtsText: string): Promise<void> {
+    const success = await this.playCustomClip(clipId);
+    if (!success) {
+      // Fallback to standard Speech Synthesis
+      await this.speak(fallbackTtsText, true);
+    }
+  }
 }
+
+// Custom interfaces for the Vault
+export interface CustomAudioClip {
+  id: string;
+  name: string;
+  base64Data: string | null;
+  description: string;
+  category: 'low' | 'normal' | 'high' | 'critical' | 'system';
+}
+
+const AUDIO_VAULT_KEY = 'nick_os_audio_vault';

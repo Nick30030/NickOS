@@ -1,11 +1,14 @@
 import React from 'react';
 import { useExecution } from '../../context/ExecutionContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { ProgressBar } from '../common/ProgressBar';
 import { StatBox } from '../common/StatBox';
 import { PriorityBadge, CommitmentBadge, StatusBadge } from '../common/Badge';
 import { EmptyState } from '../common/EmptyState';
+import { HelpTooltip } from '../common/HelpTooltip';
+import { VoiceService } from '../../services/voice/VoiceService';
 import {
   formatFriendlyDate,
   formatMinutes,
@@ -54,13 +57,30 @@ export const DashboardView: React.FC = () => {
     openCreateProjectModal,
     setIsPlanDayModalOpen,
   } = useExecution();
+  const { t } = useLanguage();
 
   const todayStr = getTodayString();
   const friendlyDate = formatFriendlyDate(todayStr);
 
+  const [idleExplanation, setIdleExplanation] = React.useState('');
+  const [submittedExplanation, setSubmittedExplanation] = React.useState(false);
+
   const todayTasks = tasks.filter(
     t => t.scheduledDate === todayStr || t.status === 'in_progress'
   );
+
+  React.useEffect(() => {
+    if (todayTasks.length === 0) {
+      const hasTriggeredKey = `nick_os_idle_alert_triggered_${todayStr}`;
+      if (!sessionStorage.getItem(hasTriggeredKey)) {
+        sessionStorage.setItem(hasTriggeredKey, 'true');
+        VoiceService.triggerStateAlert(
+          'idle_warning',
+          "Nick, attention. Aucun programme n'est planifié pour aujourd'hui. Est-ce normal ? Expliquez-moi pourquoi ou établissons un plan."
+        );
+      }
+    }
+  }, [todayTasks.length, todayStr]);
   const completedTodayTasks = todayTasks.filter(t => t.status === 'completed');
   const pendingTodayTasks = todayTasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
 
@@ -76,11 +96,12 @@ export const DashboardView: React.FC = () => {
       {/* Executive Greeting Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-neutral-800/80 w-full overflow-hidden">
         <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-100 break-words">
-            Good morning, Nick.
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-100 break-words flex items-center gap-3">
+            {t('goodMorning', 'Bonjour, Nick.')}
+            <HelpTooltip title={t('dashboard', 'Dashboard Command Center')} content="Your daily execution overview. Tracks your execution score, planned vs actual minutes, and non-negotiable hard commitments." />
           </h1>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1.5 font-mono break-words">
-            {friendlyDate} — Daily execution program is live and tracking.
+            {friendlyDate} — {t('dailyProgram', "Le programme d'exécution quotidien est actif et suivi.")}
           </p>
         </div>
 
@@ -92,7 +113,7 @@ export const DashboardView: React.FC = () => {
             onClick={() => setIsPlanDayModalOpen(true)}
             leftIcon={<Calendar className="w-3.5 h-3.5 text-neutral-400" />}
           >
-            Plan the Day
+            {t('planDay', 'Planifier la journée')}
           </Button>
           <Button
             variant="primary"
@@ -100,7 +121,7 @@ export const DashboardView: React.FC = () => {
             onClick={() => openCreateTaskModal({ scheduledDate: todayStr })}
             leftIcon={<Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
           >
-            Create Task
+            {t('createTask', 'Créer une tâche')}
           </Button>
         </div>
       </div>
@@ -108,7 +129,7 @@ export const DashboardView: React.FC = () => {
       {/* Execution Progress & High-Level Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
         <StatBox
-          label="Execution Score"
+          label={t('executionScore', "Score d'exécution")}
           value={`${executionScore}%`}
           subValue="Target: >85%"
           icon={TrendingUp}
@@ -120,27 +141,91 @@ export const DashboardView: React.FC = () => {
         />
 
         <StatBox
-          label="Today's Tasks"
+          label={t('todaysTasks', "Tâches d'aujourd'hui")}
           value={`${completedTodayTasks.length} / ${todayTasks.length}`}
           subValue={`${pendingTodayTasks.length} pending`}
           icon={CheckCircle2}
         />
 
         <StatBox
-          label="Planned vs Actual"
+          label={t('plannedVsActual', 'Planifié vs Réel')}
           value={formatMinutes(actualMins)}
           subValue={`of ${formatMinutes(plannedMins)} planned`}
           icon={Clock}
         />
 
         <StatBox
-          label="Hard Commitments"
+          label={t('hardCommitments', 'Engagements fermes')}
           value={`${fulfilledHardCommitments} / ${hardCommitmentsCount}`}
           subValue="Non-negotiables"
           icon={ShieldCheck}
           highlight={fulfilledHardCommitments === hardCommitmentsCount && hardCommitmentsCount > 0}
         />
       </div>
+
+      {/* PROACTIVE EMPTY-DAY MONITOR & INTERROGATION CARD */}
+      {todayTasks.length === 0 && (
+        <Card variant="default" className="p-6 sm:p-7 bg-amber-950/5 border border-amber-500/20 backdrop-blur-xs space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500 animate-bounce" />
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400">
+                  Alerte de Programme Manquant — Nick OS Intelligence
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-neutral-100">
+                Nick, vous n'avez aucun travail ou programme planifié pour aujourd'hui.
+              </h3>
+              <p className="text-xs sm:text-sm text-neutral-400 max-w-3xl leading-relaxed">
+                Est-ce une journée de récupération planifiée, ou y a-t-il une autre raison ? Écrivez-la ci-dessous pour que nous puissions adapter les notifications, ou générons instantanément un programme adapté via l'IA.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsPlanDayModalOpen(true)}
+                className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold font-mono rounded-xl border-none"
+              >
+                Générer un Programme d'IA
+              </Button>
+            </div>
+          </div>
+
+          {!submittedExplanation ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (idleExplanation.trim()) {
+                  setSubmittedExplanation(true);
+                  VoiceService.speak("Explication enregistrée. Profitez bien de votre journée Nick.", true);
+                }
+              }}
+              className="flex flex-col sm:flex-row items-stretch gap-3 pt-2"
+            >
+              <input
+                type="text"
+                placeholder="Ex: 'Aujourd'hui je fais une pause récupération pour le projet' ou 'Je commence à planifier maintenant'"
+                value={idleExplanation}
+                onChange={(e) => setIdleExplanation(e.target.value)}
+                className="flex-1 bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-500 font-mono placeholder:text-neutral-600"
+              />
+              <Button type="submit" variant="secondary" size="sm" className="rounded-xl border border-neutral-800 hover:bg-neutral-850 font-mono text-xs">
+                Valider l'Explication
+              </Button>
+            </form>
+          ) : (
+            <div className="p-3 bg-emerald-950/15 border border-emerald-900/30 rounded-xl text-xs text-emerald-400 font-mono flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>
+                Explication prise en compte : <strong>« {idleExplanation} »</strong>. Nick OS passe en veille bienveillante et désactive les alertes agressives pour aujourd'hui. Profitez bien !
+              </span>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Today's Execution Program Bar */}
       {todayPlan && (

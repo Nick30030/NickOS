@@ -18,26 +18,28 @@ import {
   Bell
 } from 'lucide-react';
 import { NotificationCenter } from '../notifications/NotificationCenter';
+import { useLanguage } from '../../context/LanguageContext';
 
 export const MobileNavBar: React.FC = () => {
   const { activeTab, setActiveTab, setIsQuickCaptureOpen } = useExecution();
+  const { t } = useLanguage();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const primaryTabs = [
-    { id: 'now' as NavigationTab, label: 'NOW', icon: Crosshair },
-    { id: 'today' as NavigationTab, label: 'Today', icon: Calendar },
-    { id: 'capture', label: 'Capture', icon: Zap, isAction: true },
-    { id: 'tasks' as NavigationTab, label: 'Tasks', icon: CheckSquare },
+    { id: 'now' as NavigationTab, label: t('now', 'NOW'), icon: Crosshair },
+    { id: 'today' as NavigationTab, label: t('today', 'Today'), icon: Calendar },
+    { id: 'capture', label: t('quickCapture', 'Capture'), icon: Zap, isAction: true },
+    { id: 'tasks' as NavigationTab, label: t('tasks', 'Tasks'), icon: CheckSquare },
   ];
 
   const secondaryTabs = [
-    { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'ai' as NavigationTab, label: 'AI Brain', icon: BrainCircuit },
-    { id: 'accountability' as NavigationTab, label: 'Review', icon: ShieldCheck },
-    { id: 'projects' as NavigationTab, label: 'Projects', icon: FolderKanban },
-    { id: 'goals' as NavigationTab, label: 'Goals', icon: Target },
-    { id: 'analytics' as NavigationTab, label: 'Analytics', icon: BarChart3 },
-    { id: 'settings' as NavigationTab, label: 'Settings', icon: Settings },
+    { id: 'dashboard' as NavigationTab, label: t('dashboard', 'Dashboard'), icon: LayoutDashboard },
+    { id: 'ai' as NavigationTab, label: t('ai', 'AI Brain'), icon: BrainCircuit },
+    { id: 'accountability' as NavigationTab, label: t('accountability', 'Review'), icon: ShieldCheck },
+    { id: 'projects' as NavigationTab, label: t('projects', 'Projects'), icon: FolderKanban },
+    { id: 'goals' as NavigationTab, label: t('goals', 'Goals'), icon: Target },
+    { id: 'analytics' as NavigationTab, label: t('analytics', 'Analytics'), icon: BarChart3 },
+    { id: 'settings' as NavigationTab, label: t('settings', 'Settings'), icon: Settings },
   ];
 
   const handlePrimaryClick = (tab: typeof primaryTabs[0]) => {

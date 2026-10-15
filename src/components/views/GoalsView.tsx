@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useExecution } from '../../context/ExecutionContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { Badge, StatusBadge } from '../common/Badge';
@@ -36,6 +37,7 @@ export const GoalsView: React.FC = () => {
     openCreateTaskModal,
     setActiveTab,
   } = useExecution();
+  const { t } = useLanguage();
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -68,13 +70,13 @@ export const GoalsView: React.FC = () => {
   const getStatusBadge = (status: GoalStatus) => {
     switch (status) {
       case 'on_track':
-        return <Badge variant="emerald" size="sm">ON TRACK</Badge>;
+        return <Badge variant="emerald" size="sm">{t('onTrack', 'ON TRACK')}</Badge>;
       case 'at_risk':
-        return <Badge variant="amber" size="sm">AT RISK</Badge>;
+        return <Badge variant="amber" size="sm">{t('atRisk', 'AT RISK')}</Badge>;
       case 'behind':
-        return <Badge variant="rose" size="sm">BEHIND</Badge>;
+        return <Badge variant="rose" size="sm">{t('behind', 'BEHIND')}</Badge>;
       case 'achieved':
-        return <Badge variant="emerald" size="sm">ACHIEVED</Badge>;
+        return <Badge variant="emerald" size="sm">{t('achieved', 'ACHIEVED')}</Badge>;
       default:
         return <Badge variant="neutral" size="sm">{status}</Badge>;
     }
@@ -87,10 +89,10 @@ export const GoalsView: React.FC = () => {
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-100 flex items-center gap-2.5 break-words">
             <Target className="w-7 h-7 text-emerald-400 shrink-0" />
-            Strategic Goals & Targets
+            {t('goalsHeader', 'Strategic Goals & Targets')}
           </h1>
           <p className="text-xs sm:text-sm text-neutral-400 font-mono mt-1.5 leading-relaxed break-words">
-            High-level commitments framing Nick's daily execution requirements.
+            {t('goalsSubtitle', "High-level commitments framing Nick's daily execution requirements.")}
           </p>
         </div>
 
@@ -101,7 +103,7 @@ export const GoalsView: React.FC = () => {
           icon={<Plus className="w-4 h-4" />}
           className="rounded-xl"
         >
-          New Goal
+          {t('newGoal', 'New Goal')}
         </Button>
       </div>
 
@@ -110,11 +112,11 @@ export const GoalsView: React.FC = () => {
         {/* Category Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto p-1.5 bg-neutral-950 rounded-2xl border border-neutral-800 text-xs">
           {[
-            { id: 'all', label: 'All Goals' },
-            { id: 'quarterly', label: 'Quarterly' },
-            { id: 'annual', label: 'Annual' },
-            { id: 'habit', label: 'Habits / Standards' },
-            { id: 'operational', label: 'Operational' },
+            { id: 'all', label: t('all', 'All Goals') },
+            { id: 'quarterly', label: t('horizonQuarter', 'Quarterly') },
+            { id: 'annual', label: t('horizonYear', 'Annual') },
+            { id: 'habit', label: t('horizonLife', 'Habits / Standards') },
+            { id: 'operational', label: t('operational', 'Operational') },
           ].map(tab => (
             <button
               key={tab.id}
@@ -137,11 +139,11 @@ export const GoalsView: React.FC = () => {
             onChange={e => setStatusFilter(e.target.value)}
             className="rounded-xl bg-neutral-950 border border-neutral-800 px-3.5 py-2 text-xs text-neutral-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
-            <option value="all">All Statuses</option>
-            <option value="on_track">🟢 On Track</option>
-            <option value="at_risk">🟡 At Risk</option>
-            <option value="behind">🔴 Behind</option>
-            <option value="achieved">🏆 Achieved</option>
+            <option value="all">{t('allStatus', 'All Statuses')}</option>
+            <option value="on_track">🟢 {t('onTrack', 'On Track')}</option>
+            <option value="at_risk">🟡 {t('atRisk', 'At Risk')}</option>
+            <option value="behind">🔴 {t('behind', 'Behind')}</option>
+            <option value="achieved">🏆 {t('achieved', 'Achieved')}</option>
           </select>
 
           {/* Search Input */}
@@ -149,7 +151,7 @@ export const GoalsView: React.FC = () => {
             <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
             <input
               type="text"
-              placeholder="Search goals..."
+              placeholder={t('searchPlaceholder', 'Search goals...')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full rounded-xl bg-neutral-950 border border-neutral-800 pl-9 pr-3.5 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-emerald-500 font-mono"
@@ -162,12 +164,8 @@ export const GoalsView: React.FC = () => {
       {filteredGoals.length === 0 ? (
         <EmptyState
           icon={Target}
-          title={searchQuery || categoryFilter !== 'all' ? 'No matching goals found' : 'No strategic goals established'}
-          description={
-            searchQuery || categoryFilter !== 'all'
-              ? 'Try adjusting your filters or search terms.'
-              : 'Establish your primary quarterly or annual goals to align daily execution with long-term vision.'
-          }
+          title={t('noGoalsFound', 'No goals found.')}
+          description={t('noGoalsDesc', 'Define your strategic priorities to bring meaning to each day.')}
           action={
             <Button
               variant="primary"
@@ -175,7 +173,7 @@ export const GoalsView: React.FC = () => {
               onClick={() => openCreateGoalModal()}
               leftIcon={<Plus className="w-4 h-4" />}
             >
-              Create Strategic Goal
+              {t('newGoal', 'New Goal')}
             </Button>
           }
         />
@@ -233,7 +231,7 @@ export const GoalsView: React.FC = () => {
                     <div className="flex justify-between items-center text-xs font-mono">
                       <span className="text-neutral-400 flex items-center gap-1">
                         <TrendingUp className="w-3 h-3 text-amber-400" />
-                        Target Progress
+                        {t('targetDate', 'Target Progress')}
                       </span>
                       <span className="text-amber-400 font-bold">
                         {goal.currentValue} / {goal.targetValue} {goal.metricUnit} ({progressPct}%)
@@ -246,7 +244,7 @@ export const GoalsView: React.FC = () => {
                   <div className="flex items-center justify-between text-xs font-mono">
                     <span className="text-neutral-400 flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-neutral-500" />
-                      Target Date:
+                      {t('targetDate', 'Target Date:')}
                     </span>
                     <span
                       className={`font-semibold ${
@@ -263,11 +261,11 @@ export const GoalsView: React.FC = () => {
                     <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
                       <span className="flex items-center gap-1">
                         <FolderKanban className="w-3.5 h-3.5 text-neutral-500" />
-                        {linkedProjects.length} Projects
+                        {linkedProjects.length} {t('projects', 'Projects')}
                       </span>
                       <span className="flex items-center gap-1">
                         <CheckSquare className="w-3.5 h-3.5 text-neutral-500" />
-                        {completedLinkedTasks.length}/{linkedTasks.length} Tasks Done
+                        {completedLinkedTasks.length}/{linkedTasks.length} {t('tasks', 'Tasks')} {t('done', 'Done')}
                       </span>
                     </div>
 
@@ -299,14 +297,14 @@ export const GoalsView: React.FC = () => {
                     <button
                       onClick={() => openEditGoalModal(goal)}
                       className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
-                      title="Edit Goal"
+                      title={t('edit', 'Edit Goal')}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDeleteGoal(goal.id, goal.title)}
                       className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-rose-400 transition-colors cursor-pointer"
-                      title="Delete Goal"
+                      title={t('delete', 'Delete Goal')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -317,13 +315,13 @@ export const GoalsView: React.FC = () => {
                       onClick={() => openCreateProjectModal({ goalId: goal.id, lifeAreaId: goal.lifeAreaId })}
                       className="text-[11px] font-mono px-2 py-1 rounded bg-neutral-850 hover:bg-neutral-800 text-neutral-300 hover:text-neutral-100 transition-colors cursor-pointer"
                     >
-                      + Project
+                      + {t('projects', 'Project')}
                     </button>
                     <button
                       onClick={() => openCreateTaskModal({ goalId: goal.id, lifeAreaId: goal.lifeAreaId })}
                       className="text-[11px] font-mono px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
                     >
-                      + Task
+                      + {t('tasks', 'Task')}
                     </button>
                   </div>
                 </div>

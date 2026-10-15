@@ -24,16 +24,13 @@ export const APP_CONFIG = {
   } as UserProfile,
   
   navigation: [
-    { id: 'dashboard', label: 'Dashboard', description: 'Overview & Today execution status', icon: 'LayoutDashboard' },
-    { id: 'today', label: 'Today', description: 'Daily timeblock execution program', icon: 'CalendarDays' },
-    { id: 'now', label: 'NOW', description: 'Zero-distraction active execution cockpit', icon: 'Crosshair' },
-    { id: 'goals', label: 'Goals', description: 'Quarterly & high-level targets', icon: 'Target' },
-    { id: 'projects', label: 'Projects', description: 'Active project registry', icon: 'FolderKanban' },
-    { id: 'tasks', label: 'Tasks', description: 'Master actionable backlog', icon: 'CheckSquare' },
-    { id: 'accountability', label: 'Accountability', description: 'Daily reviews, reconciliation & factual history', icon: 'ShieldCheck' },
-    { id: 'analytics', label: 'Analytics', description: 'Planned vs actual execution metrics', icon: 'BarChart3' },
-    { id: 'ai', label: 'AI Brain', description: 'Nick OS Contextual Planner & Unblocker', icon: 'BrainCircuit' },
-    { id: 'settings', label: 'Settings', description: 'Supabase, profile & integrations', icon: 'Settings' },
+    { id: 'command', label: '01. Command Center', description: 'Direction, time remaining & 3 daily missions', icon: 'LayoutDashboard' },
+    { id: 'now', label: '01.5 NOW Mode', description: 'Immediate execution and NOW mode cockpit', icon: 'Crosshair' },
+    { id: 'vision', label: '02. Vision', description: 'Identity, values & horizon 1/3/5 years', icon: 'Compass' },
+    { id: 'objectives', label: '03. Objectifs', description: 'Objectives, projects, milestones & backlog', icon: 'FolderKanban' },
+    { id: 'execution', label: '04. Exécution', description: 'Today schedule, focus timer & active tasks', icon: 'Crosshair' },
+    { id: 'evolution', label: '05. Évolution', description: 'Daily reviews, weekly audits & metrics', icon: 'ShieldCheck' },
+    { id: 'tools', label: 'Outils / Réglages', description: 'Vocal Vault, Focus Guard, AI Brain & settings', icon: 'Settings' },
   ] as NavItemConfig[],
 
   priorityColors: {

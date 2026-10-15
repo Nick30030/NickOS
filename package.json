@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts"
+    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts && tsx src/tests/focus-guard.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -19,6 +19,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "framer-motion": "^14.2.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",

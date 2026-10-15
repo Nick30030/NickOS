@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { useGamification } from './GamificationContext';
+import { playSuccessChime } from '../lib/audio';
 import {
   Task,
   Project,
@@ -25,11 +27,12 @@ import {
   AiProposalStatus,
 } from '../types/domain';
 import { BehavioralMetrics, BehaviorProfile, TransparencyInsight } from '../types/behavior';
+import { FocusGuardSettings, FocusGuardAgentHeartbeat } from '../types/focus';
 import { AdaptiveLearningService } from '../services/adaptive/AdaptiveLearningService';
 import { getRepository, getActiveStorageMode } from '../services/storage';
 import { executionService } from '../services/execution/ExecutionService';
 import { AccountabilityService } from '../services/accountability/AccountabilityService';
-import { getTodayString, timeToMinutes, generateId } from '../lib/utils';
+import { getTodayString, timeToMinutes, generateId, playNotificationChime } from '../lib/utils';
 import { VoiceCommandService } from '../services/voice/VoiceCommandService';
 import { VoiceService } from '../services/voice/VoiceService';
 import { NotificationService } from '../services/notifications/NotificationService';
@@ -207,12 +210,19 @@ interface ExecutionContextType {
   createAiProposal: (proposal: Omit<AiProposal, 'id' | 'createdAt'>) => Promise<AiProposal>;
   updateAiProposalStatus: (id: string, status: AiProposalStatus) => Promise<void>;
   buildCompactContext: () => any;
+
+  // Focus Guard State & Methods
+  focusGuardSettings: FocusGuardSettings;
+  updateFocusGuardSettings: (settings: Partial<FocusGuardSettings>) => Promise<FocusGuardSettings>;
+  focusGuardAgents: FocusGuardAgentHeartbeat[];
+  refreshFocusGuardAgents: () => Promise<void>;
 }
 
 const ExecutionContext = createContext<ExecutionContextType | undefined>(undefined);
 
 export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user: authUser, mode: authMode } = useAuth();
+  const { recordTaskCompletion } = useGamification();
   const [activeTab, setActiveTab] = useState<NavigationTab>('now');
   const [aiProposals, setAiProposals] = useState<AiProposal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
@@ -244,6 +254,18 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [accountabilityRecords, setAccountabilityRecords] = useState<DailyAccountabilityRecord[]>([]);
   const [selectedAccountabilityDate, setSelectedAccountabilityDate] = useState<string>(getTodayString());
 
+  // Focus Guard State
+  const [focusGuardSettings, setFocusGuardSettings] = useState<FocusGuardSettings>({
+    enabled: true,
+    mode: 'blacklist',
+    allowedDomains: ['nickos.ai.studio', 'ai.studio', 'github.com', 'google.com', 'stackoverflow.com', 'docs.google.com'],
+    blockedDomains: ['youtube.com', 'x.com', 'twitter.com', 'reddit.com', 'facebook.com', 'instagram.com', 'tiktok.com'],
+    blockedApps: ['Discord.exe', 'Steam.exe', 'Spotify.exe', 'League of Legends.exe'],
+    unknownSitePolicy: 'allow',
+    updatedAt: new Date().toISOString(),
+  });
+  const [focusGuardAgents, setFocusGuardAgents] = useState<FocusGuardAgentHeartbeat[]>([]);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [storageMode, setStorageMode] = useState<'supabase' | 'local_storage'>('local_storage');
@@ -256,6 +278,7 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const initialLoadDoneRef = useRef<boolean>(false);
+  const lastBlockedCountRef = useRef<number>(0);
 
   // Task Modal
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -310,6 +333,8 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         repo.getExecutionSessions(),
         repo.getAccountabilityRecords(),
         repo.getAiProposals(),
+        repo.getFocusGuardSettings().catch(() => focusGuardSettings),
+        repo.getAgentHeartbeats().catch(() => []),
       ]);
 
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -329,6 +354,8 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         loadedSessions,
         loadedAccRecords,
         loadedAiProposals,
+        loadedFgSettings,
+        loadedFgAgents,
       ] = await Promise.race([fetchPromise, timeoutPromise]);
 
       const todayPlanId = loadedPlan?.id || `plan-${today}`;
@@ -358,6 +385,8 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setExecutionHistory(loadedSessions);
       setAccountabilityRecords(loadedAccRecords);
       setAiProposals(loadedAiProposals);
+      if (loadedFgSettings) setFocusGuardSettings(loadedFgSettings);
+      if (loadedFgAgents) setFocusGuardAgents(loadedFgAgents);
 
       // Compute Adaptive behavioral aggregates and insights
       const computedMetrics = AdaptiveLearningService.calculateMetrics(
@@ -463,6 +492,85 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, [isTimerRunning, activeExecutionSession]);
+
+  // Focus Guard Methods & Session Sync Effect
+  const handleUpdateFocusGuardSettings = useCallback(async (updates: Partial<FocusGuardSettings>) => {
+    const updated = await repo.saveFocusGuardSettings(updates);
+    setFocusGuardSettings(updated);
+    try {
+      await fetch('/api/focus-guard/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (err) {
+      console.warn('Failed to sync Focus Guard settings to API:', err);
+    }
+    return updated;
+  }, [repo]);
+
+  const handleRefreshFocusGuardAgents = useCallback(async () => {
+    const agents = await repo.getAgentHeartbeats();
+    setFocusGuardAgents(agents);
+  }, [repo]);
+
+  useEffect(() => {
+    const syncSession = async () => {
+      let status: 'active' | 'paused' | 'completed' | 'abandoned' | 'disconnected' = 'disconnected';
+      if (activeExecutionSession) {
+        status = activeExecutionSession.status as any;
+      }
+      const activeTask = tasks.find(t => t.id === activeFocusTaskId);
+      try {
+        await fetch('/api/focus-guard/session-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: activeExecutionSession?.id || null,
+            taskId: activeFocusTaskId || null,
+            taskTitle: activeTask?.title || null,
+            status,
+            startTime: activeExecutionSession?.startTime || null,
+          }),
+        });
+      } catch {
+        // quiet ignore
+      }
+    };
+
+    syncSession();
+    const interval = setInterval(syncSession, 10000);
+    return () => clearInterval(interval);
+  }, [activeExecutionSession, activeFocusTaskId, tasks]);
+
+  // Periodic agent check to trigger focus guard violation sounds
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const checkViolations = async () => {
+      try {
+        const res = await fetch('/api/focus-guard/active-session');
+        if (res.ok) {
+          const data = await res.json();
+          const currentTotalBlocked = (data.agents || []).reduce((sum: number, ag: any) => sum + (ag.blockedEnforcementsCount || 0), 0);
+          
+          if (lastBlockedCountRef.current > 0 && currentTotalBlocked > lastBlockedCountRef.current) {
+            // Focus Guard violation detected!
+            VoiceService.triggerStateAlert(
+              'focus_violation',
+              "Avertissement Focus Guard ! Une application ou un site interdit a été détecté. Restez concentré."
+            );
+          }
+          lastBlockedCountRef.current = currentTotalBlocked;
+        }
+      } catch {
+        // quiet ignore
+      }
+    };
+
+    const interval = setInterval(checkViolations, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Desktop Notifications Handlers
   const [activeInAppAlert, setActiveInAppAlert] = useState<{
@@ -709,7 +817,8 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           taskId,
           targetTask.title,
           duration,
-          targetTask.description || targetTask.notes || undefined
+          targetTask.description || targetTask.notes || undefined,
+          targetTask.priority
         );
       }
 
@@ -749,6 +858,13 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const updated = await executionService.resumeSession(activeExecutionSession.id);
       setActiveExecutionSession(updated);
       setIsTimerRunning(true);
+      
+      // Trigger Vocal Vault / TTS break ending reminder
+      VoiceService.triggerStateAlert(
+        'break_ending',
+        "Fin de la pause Nick. C'est l'heure de se remettre au travail et de rester concentré !"
+      );
+
       await refreshData();
     } catch (err) {
       console.error('Failed to resume focus session:', err);
@@ -793,6 +909,16 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setTimerElapsedSeconds(0);
       setActiveExecutionSession(null);
       setActiveTimeBlockId(null);
+
+      // Trigger gamification
+      recordTaskCompletion();
+      playSuccessChime();
+
+      // Trigger dynamic celebration clip
+      VoiceService.triggerStateAlert(
+        'task_completed',
+        "Félicitations Nick, tâche terminée avec succès ! Excellent travail."
+      );
 
       // Auto-pick next planned task for today
       const nextTask = tasks.find(
@@ -1621,6 +1747,12 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createAiProposal,
         updateAiProposalStatus,
         buildCompactContext,
+
+        // Focus Guard state and methods
+        focusGuardSettings,
+        updateFocusGuardSettings: handleUpdateFocusGuardSettings,
+        focusGuardAgents,
+        refreshFocusGuardAgents: handleRefreshFocusGuardAgents,
       }}
     >
       {children}

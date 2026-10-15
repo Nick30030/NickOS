@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useExecution } from '../../context/ExecutionContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { PriorityBadge, CommitmentBadge, StatusBadge } from '../common/Badge';
@@ -50,6 +51,7 @@ import {
 } from 'lucide-react';
 
 export const NowView: React.FC = () => {
+  const { t } = useLanguage();
   const {
     tasks,
     projects,
@@ -203,7 +205,7 @@ export const NowView: React.FC = () => {
 
   return (
     <div className="w-full overflow-hidden max-w-4xl mx-auto space-y-10 pb-16 animate-in fade-in duration-150">
-      {/* 1. Cockpit Header Bar */}
+      {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800/80 pb-6 w-full overflow-hidden">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -211,10 +213,10 @@ export const NowView: React.FC = () => {
           </div>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-neutral-100 flex items-center gap-2 break-words">
-              NOW Mode — Execution Cockpit
+              {t('nowMode', 'NOW Mode')}
             </h1>
             <p className="text-xs sm:text-sm text-neutral-400 mt-0.5 break-words">
-              Deterministic source of truth. Current time: <strong className="text-emerald-400 font-mono">{currentTime}</strong>
+              {t('deterministicSourceOfTruth', 'Deterministic source of truth')}. {t('currentTime', 'Current time')}: <strong className="text-emerald-400 font-mono">{currentTime}</strong>
             </p>
           </div>
         </div>
@@ -228,7 +230,7 @@ export const NowView: React.FC = () => {
             className="bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold shadow-lg shadow-emerald-500/20 whitespace-nowrap"
             icon={<Crosshair className="w-3.5 h-3.5 text-neutral-950" />}
           >
-            Enter Focus Mode
+            {t('startFocus', 'Enter Focus Mode')}
           </Button>
           <Button
             variant="secondary"
@@ -237,7 +239,7 @@ export const NowView: React.FC = () => {
             icon={<Clock className="w-3.5 h-3.5 text-neutral-400" />}
             className="whitespace-nowrap"
           >
-            Daily Planner
+            {t('today', 'Today')}
           </Button>
           <Button
             variant="secondary"
@@ -246,7 +248,7 @@ export const NowView: React.FC = () => {
             icon={<Activity className="w-3.5 h-3.5 text-neutral-400" />}
             className="whitespace-nowrap"
           >
-            History & Audit Log
+            {t('analytics', 'Analytics')}
           </Button>
         </div>
       </div>
@@ -265,7 +267,7 @@ export const NowView: React.FC = () => {
               <div className="flex items-center gap-3">
                 <span className={`w-2.5 h-2.5 rounded-full ${isTimerRunning ? 'bg-emerald-400 animate-ping' : 'bg-neutral-500'}`} />
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">
-                  {isTimerRunning ? 'EXECUTION IN PROGRESS' : activeExecutionSession?.status === 'paused' ? 'EXECUTION PAUSED' : 'SCHEDULED FOR NOW'}
+                  {isTimerRunning ? t('executionInProgress', 'EXECUTION IN PROGRESS') : activeExecutionSession?.status === 'paused' ? t('executionPaused', 'EXECUTION PAUSED') : t('scheduledForNow', 'SCHEDULED FOR NOW')}
                 </span>
                 {activeExecutionSession && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">
@@ -285,7 +287,7 @@ export const NowView: React.FC = () => {
               {/* CURRENT TASK TITLE */}
               <div>
                 <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-bold block mb-1.5">
-                  CURRENT TASK
+                  {t('currentTask', 'CURRENT TASK')}
                 </span>
                 <h2 className="text-2xl md:text-3xl font-extrabold text-neutral-100 tracking-tight break-words">
                   {resolvedTask.title}
@@ -465,7 +467,7 @@ export const NowView: React.FC = () => {
                       icon={<Play className="w-5 h-5 fill-current" />}
                       className="px-6 py-3 text-base shadow-lg shadow-emerald-500/20 whitespace-nowrap"
                     >
-                      {activeExecutionSession?.status === 'paused' ? 'RESUME FOCUS' : 'START FOCUS'}
+                      {activeExecutionSession?.status === 'paused' ? t('resumeSession', 'RESUME FOCUS') : t('startFocus', 'START FOCUS')}
                     </Button>
                   ) : (
                     <Button
@@ -475,7 +477,7 @@ export const NowView: React.FC = () => {
                       icon={<Pause className="w-5 h-5 fill-current text-emerald-400" />}
                       className="px-6 py-3 whitespace-nowrap"
                     >
-                      Pause Focus
+                      {t('pauseSession', 'Pause Focus')}
                     </Button>
                   )}
 
@@ -486,7 +488,7 @@ export const NowView: React.FC = () => {
                     icon={<CheckCircle2 className="w-5 h-5 text-neutral-950" />}
                     className="bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold border-emerald-400 whitespace-nowrap"
                   >
-                    Complete Task
+                    {t('finishTask', 'Complete Task')}
                   </Button>
                 </div>
 
@@ -498,7 +500,7 @@ export const NowView: React.FC = () => {
                     icon={<RotateCcw className="w-4 h-4 text-neutral-400" />}
                     className="whitespace-nowrap"
                   >
-                    Postpone / Defer
+                    {t('postponeTask', 'Postpone / Defer')}
                   </Button>
                 </div>
               </div>

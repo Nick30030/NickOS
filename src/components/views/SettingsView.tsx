@@ -8,8 +8,10 @@ import { APP_CONFIG } from '../../config/app.config';
 import { NotificationService } from '../../services/notifications/NotificationService';
 import { VoiceService } from '../../services/voice/VoiceService';
 import { NotificationPreferences } from '../../types/notification';
+import { useLanguage } from '../../context/LanguageContext';
 import { GoogleCalendarCard } from '../integrations/GoogleCalendarCard';
 import { GoogleTasksCard } from '../integrations/GoogleTasksCard';
+import { FocusGuardPanel } from '../focus/FocusGuardPanel';
 import {
   Settings,
   Database,
@@ -28,12 +30,19 @@ import {
   Volume2,
   VolumeX,
   Laptop,
+  Mic,
+  Square,
+  Play,
+  Trash2,
+  AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import { SUPABASE_CONFIG_STATUS } from '../../lib/supabase';
 
 export const SettingsView: React.FC = () => {
   const { userProfile, storageMode, setIsSupabaseModalOpen } = useExecution();
   const { theme, toggleTheme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
 
   const [name, setName] = useState(userProfile?.name || 'Nick');
   const [timezone, setTimezone] = useState(userProfile?.timezone || 'Europe/London');
@@ -68,6 +77,91 @@ export const SettingsView: React.FC = () => {
     language: 'en-US',
   });
   const [voiceSavedSuccess, setVoiceSavedSuccess] = useState(false);
+  const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [audioClips, setAudioClips] = useState<any[]>([]);
+  const [recordingClipId, setRecordingClipId] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [playingClipId, setPlayingClipId] = useState<string | null>(null);
+
+  const startRecording = async (clipId: string) => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("L'enregistrement microphone n'est pas supporté par votre navigateur actuel ou l'iframe sécurisée. Utilisez le bouton UPLOAD pour importer directement un fichier audio.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64Data = reader.result as string;
+          VoiceService.saveCustomClip(clipId, base64Data);
+          setAudioClips(VoiceService.getCustomClips());
+          stream.getTracks().forEach(track => track.stop());
+        };
+      };
+
+      setMediaRecorder(recorder);
+      setRecordingClipId(clipId);
+      setIsRecording(true);
+      recorder.start();
+    } catch (err: any) {
+      console.warn('Microphone permission denied or unavailable:', err);
+      alert('Accès au microphone refusé ou non disponible dans cet aperçu sécurisé. Utilisez le bouton UPLOAD pour importer directement un fichier audio (.mp3, .wav, .m4a).');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setRecordingClipId(null);
+    }
+  };
+
+  const playPreview = async (clipId: string) => {
+    setPlayingClipId(clipId);
+    const success = await VoiceService.playCustomClip(clipId);
+    if (!success) {
+      const fallbackMap: Record<string, string> = {
+        idle_warning: "Nick, attention. Aucun programme n'est planifié pour aujourd'hui. Est-ce normal ?",
+        task_start_normal: "Lancement de la tâche. C'est parti, bon travail !",
+        task_start_critical: "Attention, démarrage d'une tâche critique. Concentrez-vous pleinement.",
+        break_ending: "Fin de la pause. Retour au travail immédiat !",
+        focus_violation: "Avertissement Focus Guard. Fermez immédiatement l'application bannie.",
+        task_completed: "Félicitations, tâche terminée ! Excellent travail."
+      };
+      await VoiceService.speak(fallbackMap[clipId] || "Aperçu de la voix.", true);
+    }
+    setPlayingClipId(null);
+  };
+
+  const deleteClip = (clipId: string) => {
+    VoiceService.deleteCustomClip(clipId);
+    setAudioClips(VoiceService.getCustomClips());
+  };
+
+  const handleFileUpload = (clipId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = () => {
+      const base64Data = reader.result as string;
+      VoiceService.saveCustomClip(clipId, base64Data);
+      setAudioClips(VoiceService.getCustomClips());
+    };
+  };
 
   const loadDevices = async () => {
     try {
@@ -98,6 +192,19 @@ export const SettingsView: React.FC = () => {
     // Load voice preferences
     const loadedVoice = VoiceService.loadPreferences();
     setVoicePrefs(loadedVoice);
+
+    // Load custom audio vault clips
+    setAudioClips(VoiceService.getCustomClips());
+
+    // Initialize system voices
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        setSystemVoices(voices);
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
   const handleRemoveDevice = async (endpoint: string) => {
@@ -143,19 +250,61 @@ export const SettingsView: React.FC = () => {
     a.click();
   };
 
+  const handleExportTypicalDay = () => {
+    const dayPlans = localStorage.getItem('nick_os_day_plans') || '[]';
+    const timeBlocks = localStorage.getItem('nick_os_time_blocks') || '[]';
+    const payload = {
+      exportType: 'nick_os_typical_day_template',
+      createdAt: new Date().toISOString(),
+      dayPlans: JSON.parse(dayPlans),
+      timeBlocks: JSON.parse(timeBlocks),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nick-os-typical-day-template.json`;
+    a.click();
+  };
+
+  const handleImportTypicalDay = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (json.dayPlans) {
+          localStorage.setItem('nick_os_day_plans', JSON.stringify(json.dayPlans));
+        }
+        if (json.timeBlocks) {
+          localStorage.setItem('nick_os_time_blocks', JSON.stringify(json.timeBlocks));
+        }
+        alert('Journée type importée avec succès ! Rechargement...');
+        window.location.reload();
+      } catch (err) {
+        alert('Erreur lors de l’importation du fichier JSON : ' + err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="w-full overflow-hidden max-w-5xl space-y-8 animate-in fade-in duration-200 pb-16">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-800/80 w-full overflow-hidden">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-100 flex items-center gap-2.5 break-words">
             <Settings className="w-7 h-7 text-emerald-400 shrink-0" />
-            System Configuration
+            {t('settingsHeader', 'System Configuration')}
           </h1>
           <p className="text-xs sm:text-sm text-neutral-400 font-mono mt-1.5 leading-relaxed break-words">
-            NICK OS operational parameters, database synchronization, and integration roadmap.
+            {t('settingsSubtitle', 'Personal configuration, storage modes, theme and system integrations for Nick.')}
           </p>
         </div>
       </div>
+
+      {/* Focus Guard Protection Matrix */}
+      <FocusGuardPanel />
 
       {/* Database & Storage Engine */}
       <Card className="p-6 space-y-5 border border-neutral-800/80 bg-neutral-900/60">
@@ -204,19 +353,19 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <User className="w-5 h-5 text-emerald-400" />
           <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
-            Nick's Execution Parameters
+            {t('profileSection', "Nick's Execution Parameters")}
           </h3>
         </div>
 
         <form onSubmit={handleSaveProfile} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Primary User Name"
+              label={t('fullName', 'Primary User Name')}
               value={name}
               onChange={e => setName(e.target.value)}
             />
             <Input
-              label="Timezone"
+              label={t('timezone', 'Timezone')}
               value={timezone}
               onChange={e => setTimezone(e.target.value)}
             />
@@ -225,13 +374,13 @@ export const SettingsView: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               type="time"
-              label="Daily Work Block Start"
+              label={t('workStart', 'Daily Work Block Start')}
               value={workStart}
               onChange={e => setWorkStart(e.target.value)}
             />
             <Input
               type="time"
-              label="Daily Work Block End"
+              label={t('workEnd', 'Daily Work Block End')}
               value={workEnd}
               onChange={e => setWorkEnd(e.target.value)}
             />
@@ -240,12 +389,12 @@ export const SettingsView: React.FC = () => {
           <div className="flex items-center justify-between pt-2">
             {savedSuccess && (
               <span className="text-xs text-emerald-400 font-mono flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Parameters updated.
+                <CheckCircle2 className="w-3.5 h-3.5" /> {t('profileSaved', 'Parameters updated.')}
               </span>
             )}
             <div className="ml-auto">
               <Button type="submit" variant="primary" size="sm">
-                Save Preferences
+                {t('saveProfile', 'Save Preferences')}
               </Button>
             </div>
           </div>
@@ -253,19 +402,20 @@ export const SettingsView: React.FC = () => {
       </Card>
 
       {/* Proactive Notification Engine Config */}
+      {/* Proactive Notification Engine Config */}
       <Card className="p-5 space-y-4 border border-neutral-800">
         <div className="flex items-center gap-2 pb-2 border-b border-neutral-850">
           <Bell className="w-4 h-4 text-amber-400" />
           <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
-            Proactive Notification Engine
+            {t('notificationsCardTitle', 'Proactive Notification Subscriptions')}
           </h3>
         </div>
 
         <form onSubmit={handleSaveNotifPrefs} className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-neutral-950 rounded-lg border border-neutral-850">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-neutral-200 block">Proactive Reminders Status</span>
-              <span className="text-[10px] text-neutral-400">Enable or disable all system alerts and schedule notifications.</span>
+              <span className="text-xs font-bold text-neutral-200 block">{t('desktopWorkAlerts', 'Proactive Reminders Status')}</span>
+              <span className="text-[10px] text-neutral-400">{t('desktopAlertsActiveDesc', 'Enable or disable all system alerts and schedule notifications.')}</span>
             </div>
             <input
               type="checkbox"
@@ -305,22 +455,22 @@ export const SettingsView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-mono uppercase text-neutral-400 block font-bold">
-                    Reminder Lead Time
+                    {t('reminderLeadTime', 'Reminder Lead Time')}
                   </label>
                   <select
                     value={notifPrefs.reminderLeadTime}
                     onChange={e => setNotifPrefs({ ...notifPrefs, reminderLeadTime: parseInt(e.target.value, 10) })}
                     className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 rounded px-2.5 py-1.5 text-xs font-mono focus:border-amber-500 focus:outline-hidden"
                   >
-                    <option value={5}>5 minutes before</option>
-                    <option value={10}>10 minutes before</option>
-                    <option value={15}>15 minutes before</option>
-                    <option value={30}>30 minutes before</option>
+                    <option value={5}>5 min</option>
+                    <option value={10}>10 min</option>
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-mono uppercase text-neutral-400 block font-bold">
-                    Accountability Review Time
+                    {t('accountabilityReviewTime', 'Accountability Review Time')}
                   </label>
                   <input
                     type="time"
@@ -333,12 +483,12 @@ export const SettingsView: React.FC = () => {
 
               <div className="space-y-2 pt-2 border-t border-neutral-850">
                 <span className="text-[10px] font-mono uppercase text-neutral-400 block font-bold tracking-wider">
-                  Notification Channel Subscriptions
+                  {t('notificationsCardTitle', 'Notification Channel Subscriptions')}
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-lg border border-neutral-850 text-xs cursor-pointer">
-                    <span className="text-neutral-300">Task Reminders</span>
+                    <span className="text-neutral-300">{t('taskReminders', 'Task Reminders')}</span>
                     <input
                       type="checkbox"
                       checked={notifPrefs.enableTaskReminders}
@@ -348,7 +498,7 @@ export const SettingsView: React.FC = () => {
                   </label>
 
                   <label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-lg border border-neutral-850 text-xs cursor-pointer">
-                    <span className="text-neutral-300">Schedule Change Alerts</span>
+                    <span className="text-neutral-300">{t('scheduleChangeAlerts', 'Schedule Change Alerts')}</span>
                     <input
                       type="checkbox"
                       checked={notifPrefs.enableScheduleChange}
@@ -358,7 +508,7 @@ export const SettingsView: React.FC = () => {
                   </label>
 
                   <label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-lg border border-neutral-850 text-xs cursor-pointer">
-                    <span className="text-neutral-300">AI Proposal Suggestions</span>
+                    <span className="text-neutral-300">{t('aiProposalSuggestions', 'AI Proposal Suggestions')}</span>
                     <input
                       type="checkbox"
                       checked={notifPrefs.enableAiProposals}
@@ -368,7 +518,7 @@ export const SettingsView: React.FC = () => {
                   </label>
 
                   <label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-lg border border-neutral-850 text-xs cursor-pointer">
-                    <span className="text-neutral-300">Interruption Resets</span>
+                    <span className="text-neutral-300">{t('interruptionResets', 'Interruption Resets')}</span>
                     <input
                       type="checkbox"
                       checked={notifPrefs.enableInterruptionReminders}
@@ -378,7 +528,7 @@ export const SettingsView: React.FC = () => {
                   </label>
 
                   <label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-lg border border-neutral-850 text-xs cursor-pointer">
-                    <span className="text-neutral-300">Daily Accountability Review</span>
+                    <span className="text-neutral-300">{t('dailyAccountabilityReview', 'Daily Accountability Review')}</span>
                     <input
                       type="checkbox"
                       checked={notifPrefs.enableDailyReview}
@@ -394,16 +544,107 @@ export const SettingsView: React.FC = () => {
           <div className="flex items-center justify-between pt-2">
             {notifSavedSuccess && (
               <span className="text-xs text-emerald-400 font-mono flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Notification parameters updated.
+                <CheckCircle2 className="w-3.5 h-3.5" /> {t('profileSaved', 'Notification parameters updated.')}
               </span>
             )}
             <div className="ml-auto">
               <Button type="submit" variant="primary" size="sm">
-                Save Notification Preferences
+                {t('saveNotifPrefs', 'Save Notification Preferences')}
               </Button>
             </div>
           </div>
         </form>
+      </Card>
+
+      {/* Multilingual Support Card */}
+      <Card className="p-5 space-y-4 border border-neutral-800" id="language-card">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-850">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-emerald-400" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
+                {t('languageCardTitle', 'Interface Language (Multilingual Support)')}
+              </h3>
+              <p className="text-[10px] text-neutral-400 font-mono">
+                {t('languageCardSubtitle', 'Switch between French, English, Chinese, and Spanish instantly.')}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-mono uppercase font-bold border border-emerald-500/20">
+            {language}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { code: 'fr', label: 'Français', flag: '🇫🇷' },
+            { code: 'en', label: 'English', flag: '🇬🇧' },
+            { code: 'zh', label: '中文 (Chinese)', flag: '🇨🇳' },
+            { code: 'es', label: 'Español', flag: '🇪🇸' },
+          ].map(lang => (
+            <button
+              key={lang.code}
+              type="button"
+              onClick={() => setLanguage(lang.code as any)}
+              className={`p-3 rounded-xl border text-xs font-mono flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                language === lang.code
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold shadow-xs'
+                  : 'bg-neutral-950 border-neutral-850 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
+              }`}
+            >
+              <span>{lang.flag}</span>
+              <span>{lang.label}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Theme Preference Card */}
+      <Card className="p-5 space-y-4 border border-neutral-800" id="theme-card">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-850">
+          <div className="flex items-center gap-2">
+            {theme === 'dark' ? <Moon className="w-4 h-4 text-sky-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
+                {t('themeCardTitle', 'Mode Thème (Clair / Sombre)')}
+              </h3>
+              <p className="text-[10px] text-neutral-400 font-mono">
+                {t('themeCardSubtitle', 'Basculez entre le thème sombre souverain et le thème clair haute lisibilité.')}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded-full font-mono uppercase font-bold">
+            {theme === 'dark' ? t('themeDark', 'Sombre') : t('themeLight', 'Clair')}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            className={`p-3.5 rounded-xl border text-xs font-mono flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold shadow-xs'
+                : 'bg-neutral-950 border-neutral-850 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
+            }`}
+          >
+            <Moon className="w-4 h-4 text-sky-400" />
+            <span>{t('themeDark', 'Thème Sombre')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            className={`p-3.5 rounded-xl border text-xs font-mono flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+              theme === 'light'
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold shadow-xs'
+                : 'bg-neutral-950 border-neutral-850 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
+            }`}
+          >
+            <Sun className="w-4 h-4 text-amber-400" />
+            <span>{t('themeLight', 'Thème Clair')}</span>
+          </button>
+        </div>
       </Card>
 
       {/* Voice Layer & TTS Preferences */}
@@ -540,6 +781,28 @@ export const SettingsView: React.FC = () => {
                     <option value="es-ES">Español (España)</option>
                   </select>
                 </div>
+
+                {/* Specific Voice Select dropdown */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-mono text-neutral-400 block">Select Voice Actor</label>
+                  <select
+                    value={voicePrefs.selectedVoiceURI || ''}
+                    onChange={e => setVoicePrefs({ ...voicePrefs, selectedVoiceURI: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">-- Default Language Voice --</option>
+                    {systemVoices
+                      .filter(v => v.lang.toLowerCase().startsWith(voicePrefs.language.toLowerCase()))
+                      .map(voice => (
+                        <option key={voice.voiceURI} value={voice.voiceURI}>
+                          {voice.name} {voice.localService ? '(On-Device)' : '(Online)'}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-[10px] text-neutral-500 font-mono">
+                    If you have custom cloned voices installed on your OS, they will appear above.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -557,6 +820,152 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
         </form>
+      </Card>
+
+      {/* Vocal Vault — Personal Voice Recordings Card */}
+      <Card className="p-5 space-y-4 border border-neutral-800 bg-neutral-900/40" id="vocal-vault-card">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-neutral-850">
+          <div className="flex items-center gap-2">
+            <Mic className="w-5 h-5 text-amber-500 animate-pulse" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
+                Nick OS Vocal Vault — Voix Réelle
+              </h3>
+              <p className="text-[10px] text-neutral-400 font-mono">
+                Enregistrez vos propres fichiers audio depuis votre téléphone ou PC pour servir d'alertes personnalisées basées sur la criticité.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-mono border border-amber-500/20">
+            {audioClips.filter(c => c.base64Data).length} / {audioClips.length} ACTIFS
+          </span>
+        </div>
+
+        <p className="text-xs text-neutral-400 font-mono leading-relaxed bg-neutral-950/60 p-3 rounded-xl border border-neutral-850/50">
+          💡 <strong>Principe de l'IA Hybride :</strong> Si vous n'avez pas encore enregistré votre voix pour une alerte, Nick OS est assez intelligent pour utiliser la <strong>synthèse vocale standard (TTS)</strong>. Dès que vous enregistrez un audio ci-dessous, le système bascule automatiquement sur votre propre voix enregistrée.
+        </p>
+
+        <div className="grid grid-cols-1 gap-3">
+          {audioClips.map((clip) => {
+            const hasAudio = !!clip.base64Data;
+            const isThisRecording = recordingClipId === clip.id;
+            const isThisPlaying = playingClipId === clip.id;
+
+            return (
+              <div
+                key={clip.id}
+                className={`p-3.5 rounded-xl border transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  isThisRecording
+                    ? 'bg-red-950/20 border-red-500/40 animate-pulse'
+                    : hasAudio
+                    ? 'bg-emerald-950/5 border-emerald-900/30 hover:border-emerald-800/40'
+                    : 'bg-neutral-950 border-neutral-850/50'
+                }`}
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-neutral-200">{clip.name}</span>
+                    <span
+                      className={`text-[8px] font-mono px-1.5 py-0.5 rounded uppercase font-bold shrink-0 ${
+                        clip.category === 'critical'
+                          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          : clip.category === 'high'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : clip.category === 'normal'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-neutral-800 text-neutral-400'
+                      }`}
+                    >
+                      {clip.category}
+                    </span>
+                    <span
+                      className={`text-[8px] font-mono px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                        hasAudio
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                          : 'bg-neutral-800 text-neutral-500'
+                      }`}
+                    >
+                      {hasAudio ? '🟢 Voix Enregistrée' : '🟡 Synthèse Vocale'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 font-mono leading-relaxed">
+                    {clip.description}
+                  </p>
+                </div>
+
+                {/* Control Panel */}
+                <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                  {/* Record microphone trigger */}
+                  {isThisRecording ? (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      onClick={stopRecording}
+                      className="px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-mono text-xs bg-red-600 hover:bg-red-700 animate-pulse"
+                    >
+                      <Square className="w-3 h-3 fill-white" />
+                      STOP
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => startRecording(clip.id)}
+                      disabled={isRecording && !isThisRecording}
+                      className="px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-mono text-xs border-neutral-800 hover:bg-neutral-850"
+                    >
+                      <Mic className="w-3 h-3 text-red-500" />
+                      REC
+                    </Button>
+                  )}
+
+                  {/* Upload file trigger */}
+                  <label className="cursor-pointer shrink-0">
+                    <span className="px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-850 text-xs font-mono inline-flex items-center gap-1.5">
+                      <Upload className="w-3 h-3 text-neutral-400" />
+                      UPLOAD
+                    </span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => handleFileUpload(clip.id, e)}
+                      className="hidden"
+                      disabled={isRecording}
+                    />
+                  </label>
+
+                  {/* Play audio/preview */}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => playPreview(clip.id)}
+                    disabled={isRecording}
+                    className="p-1.5 rounded-lg border-neutral-800 text-neutral-300 hover:bg-neutral-850"
+                  >
+                    <Play className={`w-3.5 h-3.5 ${isThisPlaying ? 'animate-spin text-amber-500' : ''}`} />
+                  </Button>
+
+                  {/* Reset/Delete audio trigger */}
+                  {hasAudio && (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      onClick={() => deleteClip(clip.id)}
+                      disabled={isRecording}
+                      className="p-1.5 rounded-lg border-neutral-800 text-red-400 hover:bg-red-950/30"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       {/* Google Calendar Integration */}
@@ -665,6 +1074,37 @@ export const SettingsView: React.FC = () => {
           >
             Export Backup
           </Button>
+        </div>
+      </Card>
+
+      {/* Typical Day JSON Template Export & Import */}
+      <Card className="p-5 space-y-4 border border-neutral-800">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-850">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-neutral-200">
+              Typical Day Templates (JSON)
+            </h3>
+            <p className="text-xs text-neutral-400">
+              Export and import complex multi-block daily schedules so you never have to rebuild them manually.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleExportTypicalDay}
+            leftIcon={<Download className="w-3.5 h-3.5" />}
+          >
+            Export Day Template (.json)
+          </Button>
+
+          <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-xs font-mono border border-neutral-700 transition-colors">
+            <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Import Day Template (.json)</span>
+            <input type="file" accept=".json" onChange={handleImportTypicalDay} className="hidden" />
+          </label>
         </div>
       </Card>
 

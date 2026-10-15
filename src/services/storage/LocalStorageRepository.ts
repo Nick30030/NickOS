@@ -15,6 +15,7 @@ import {
   AiProposal,
 } from '../../types/domain';
 import { FilterOptions, IExecutionRepository } from '../../types/repository';
+import { FocusGuardSettings, FocusGuardAgentHeartbeat } from '../../types/focus';
 import { APP_CONFIG } from '../../config/app.config';
 import { generateId, getTodayString } from '../../lib/utils';
 
@@ -84,6 +85,8 @@ const STORAGE_KEYS = {
   COMMITMENTS: 'nick_os_commitments',
   USER_PROFILE: 'nick_os_user_profile',
   AI_PROPOSALS: 'nick_os_ai_proposals',
+  FOCUS_GUARD_SETTINGS: 'nick_os_focus_guard_settings',
+  FOCUS_GUARD_HEARTBEATS: 'nick_os_focus_guard_heartbeats',
 };
 
 export class LocalStorageRepository implements IExecutionRepository {
@@ -1181,5 +1184,74 @@ export class LocalStorageRepository implements IExecutionRepository {
     };
     safeStorage.setItem(STORAGE_KEYS.AI_PROPOSALS, JSON.stringify(proposals));
     return proposals[index];
+  }
+
+  // ============================================================================
+  // FOCUS GUARD SETTINGS & HEARTBEATS
+  // ============================================================================
+  async getFocusGuardSettings(): Promise<FocusGuardSettings> {
+    const raw = safeStorage.getItem(STORAGE_KEYS.FOCUS_GUARD_SETTINGS);
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {}
+    }
+    const defaultSettings: FocusGuardSettings = {
+      enabled: true,
+      mode: 'blacklist',
+      allowedDomains: ['nickos.ai.studio', 'ai.studio', 'github.com', 'google.com', 'stackoverflow.com', 'docs.google.com'],
+      blockedDomains: ['youtube.com', 'x.com', 'twitter.com', 'reddit.com', 'facebook.com', 'instagram.com', 'tiktok.com'],
+      blockedApps: ['Discord.exe', 'Steam.exe', 'Spotify.exe', 'League of Legends.exe'],
+      unknownSitePolicy: 'allow',
+      updatedAt: new Date().toISOString(),
+    };
+    safeStorage.setItem(STORAGE_KEYS.FOCUS_GUARD_SETTINGS, JSON.stringify(defaultSettings));
+    return defaultSettings;
+  }
+
+  async saveFocusGuardSettings(updates: Partial<FocusGuardSettings>): Promise<FocusGuardSettings> {
+    const current = await this.getFocusGuardSettings();
+    const updated: FocusGuardSettings = {
+      ...current,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    safeStorage.setItem(STORAGE_KEYS.FOCUS_GUARD_SETTINGS, JSON.stringify(updated));
+    return updated;
+  }
+
+  async recordAgentHeartbeat(heartbeat: FocusGuardAgentHeartbeat): Promise<FocusGuardAgentHeartbeat> {
+    const heartbeats = await this.getAgentHeartbeats();
+    const index = heartbeats.findIndex(h => h.clientId === heartbeat.clientId);
+    const updatedRecord: FocusGuardAgentHeartbeat = {
+      ...heartbeat,
+      id: heartbeat.id || generateId('hb'),
+      lastHeartbeatAt: new Date().toISOString(),
+    };
+    if (index >= 0) {
+      heartbeats[index] = updatedRecord;
+    } else {
+      heartbeats.push(updatedRecord);
+    }
+    safeStorage.setItem(STORAGE_KEYS.FOCUS_GUARD_HEARTBEATS, JSON.stringify(heartbeats));
+    return updatedRecord;
+  }
+
+  async getAgentHeartbeats(): Promise<FocusGuardAgentHeartbeat[]> {
+    const raw = safeStorage.getItem(STORAGE_KEYS.FOCUS_GUARD_HEARTBEATS);
+    if (!raw) return [];
+    try {
+      const list: FocusGuardAgentHeartbeat[] = JSON.parse(raw);
+      const cutoff = Date.now() - 45000; // 45 seconds stale cutoff
+      return list.map(h => {
+        const last = new Date(h.lastHeartbeatAt).getTime();
+        if (isNaN(last) || last < cutoff) {
+          return { ...h, status: 'disconnected' };
+        }
+        return h;
+      });
+    } catch {
+      return [];
+    }
   }
 }

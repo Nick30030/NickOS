@@ -10,6 +10,7 @@ import { QuickCaptureModal } from '../modals/QuickCaptureModal';
 import { PlanDayModal } from '../modals/PlanDayModal';
 import { SupabaseSetupModal } from '../modals/SupabaseSetupModal';
 import { InAppAlertModal } from '../modals/InAppAlertModal';
+import { MorningLockModal } from '../common/MorningLockModal';
 import { X } from 'lucide-react';
 
 export const AppShell: React.FC<{
@@ -70,6 +71,7 @@ export const AppShell: React.FC<{
       <PlanDayModal />
       <SupabaseSetupModal />
       <InAppAlertModal />
+      <MorningLockModal />
     </div>
   );
 };

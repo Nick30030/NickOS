@@ -1,7 +1,9 @@
 import React from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { ExecutionProvider, useExecution } from './context/ExecutionContext';
+import { GamificationProvider } from './context/GamificationContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { AppShell } from './components/layout/AppShell';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
@@ -17,6 +19,9 @@ import { AnalyticsView } from './components/views/AnalyticsView';
 import { SettingsView } from './components/views/SettingsView';
 import { AccountabilityView } from './components/views/AccountabilityView';
 import { AiBrainView } from './components/views/AiBrainView';
+import { HelpView } from './components/views/HelpView';
+import { CommandCenterView } from './components/views/CommandCenterView';
+import { VisionView } from './components/views/VisionView';
 
 const MainContentRouter: React.FC = () => {
   const { activeTab, isLoading } = useExecution();
@@ -56,28 +61,24 @@ const MainContentRouter: React.FC = () => {
   }
 
   switch (activeTab) {
+    case 'command':
     case 'dashboard':
       return (
-        <ErrorBoundary sectionName="Dashboard">
-          <DashboardView />
+        <ErrorBoundary sectionName="Command Center">
+          <CommandCenterView />
         </ErrorBoundary>
       );
-    case 'today':
+    case 'vision':
       return (
-        <ErrorBoundary sectionName="Today's Planner">
-          <TodayView />
+        <ErrorBoundary sectionName="Vision">
+          <VisionView />
         </ErrorBoundary>
       );
-    case 'now':
+    case 'objectives':
+    case 'projects':
       return (
-        <ErrorBoundary sectionName="NOW Cockpit">
-          <NowView />
-        </ErrorBoundary>
-      );
-    case 'accountability':
-      return (
-        <ErrorBoundary sectionName="Accountability">
-          <AccountabilityView />
+        <ErrorBoundary sectionName="Objectives & Projects">
+          <ProjectsView />
         </ErrorBoundary>
       );
     case 'goals':
@@ -86,10 +87,17 @@ const MainContentRouter: React.FC = () => {
           <GoalsView />
         </ErrorBoundary>
       );
-    case 'projects':
+    case 'execution':
+    case 'today':
       return (
-        <ErrorBoundary sectionName="Projects">
-          <ProjectsView />
+        <ErrorBoundary sectionName="Execution Planner">
+          <TodayView />
+        </ErrorBoundary>
+      );
+    case 'now':
+      return (
+        <ErrorBoundary sectionName="Execution Cockpit">
+          <NowView />
         </ErrorBoundary>
       );
     case 'tasks':
@@ -98,10 +106,24 @@ const MainContentRouter: React.FC = () => {
           <TasksView />
         </ErrorBoundary>
       );
+    case 'evolution':
+    case 'accountability':
+      return (
+        <ErrorBoundary sectionName="Evolution & Reviews">
+          <AccountabilityView />
+        </ErrorBoundary>
+      );
     case 'analytics':
       return (
-        <ErrorBoundary sectionName="Analytics Command Center">
+        <ErrorBoundary sectionName="Analytics">
           <AnalyticsView />
+        </ErrorBoundary>
+      );
+    case 'tools':
+    case 'settings':
+      return (
+        <ErrorBoundary sectionName="Tools & Settings">
+          <SettingsView />
         </ErrorBoundary>
       );
     case 'ai':
@@ -110,16 +132,16 @@ const MainContentRouter: React.FC = () => {
           <AiBrainView />
         </ErrorBoundary>
       );
-    case 'settings':
+    case 'help':
       return (
-        <ErrorBoundary sectionName="Settings">
-          <SettingsView />
+        <ErrorBoundary sectionName="Help & Guide">
+          <HelpView />
         </ErrorBoundary>
       );
     default:
       return (
-        <ErrorBoundary sectionName="Dashboard">
-          <DashboardView />
+        <ErrorBoundary sectionName="Command Center">
+          <CommandCenterView />
         </ErrorBoundary>
       );
   }
@@ -130,11 +152,15 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <ExecutionProvider>
-            <AppShell>
-              <MainContentRouter />
-            </AppShell>
-          </ExecutionProvider>
+          <LanguageProvider>
+            <GamificationProvider>
+              <ExecutionProvider>
+                <AppShell>
+                  <MainContentRouter />
+                </AppShell>
+              </ExecutionProvider>
+            </GamificationProvider>
+          </LanguageProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

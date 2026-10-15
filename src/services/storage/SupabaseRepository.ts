@@ -17,6 +17,7 @@ import {
   AiProposal,
 } from '../../types/domain';
 import { FilterOptions, IExecutionRepository } from '../../types/repository';
+import { FocusGuardSettings, FocusGuardAgentHeartbeat } from '../../types/focus';
 import { LocalStorageRepository } from './LocalStorageRepository';
 
 export class SupabaseRepository implements IExecutionRepository {
@@ -1158,5 +1159,168 @@ export class SupabaseRepository implements IExecutionRepository {
 
   async updateAiProposal(id: string, updates: Partial<AiProposal>): Promise<AiProposal> {
     return this.fallback.updateAiProposal(id, updates);
+  }
+
+  // ============================================================================
+  // FOCUS GUARD SETTINGS & AGENT HEARTBEATS
+  // ============================================================================
+  async getFocusGuardSettings(): Promise<FocusGuardSettings> {
+    try {
+      const { data: { user } } = await this.client.auth.getUser();
+      if (!user) return this.fallback.getFocusGuardSettings();
+
+      const { data, error } = await this.client
+        .from('focus_guard_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error || !data) return this.fallback.getFocusGuardSettings();
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        enabled: data.enabled ?? true,
+        mode: data.mode || 'blacklist',
+        allowedDomains: Array.isArray(data.allowed_domains) ? data.allowed_domains : JSON.parse(data.allowed_domains || '[]'),
+        blockedDomains: Array.isArray(data.blocked_domains) ? data.blocked_domains : JSON.parse(data.blocked_domains || '[]'),
+        blockedApps: Array.isArray(data.blocked_apps) ? data.blocked_apps : JSON.parse(data.blocked_apps || '[]'),
+        unknownSitePolicy: data.unknown_site_policy || 'allow',
+        updatedAt: data.updated_at,
+      };
+    } catch {
+      return this.fallback.getFocusGuardSettings();
+    }
+  }
+
+  async saveFocusGuardSettings(updates: Partial<FocusGuardSettings>): Promise<FocusGuardSettings> {
+    try {
+      const { data: { user } } = await this.client.auth.getUser();
+      if (!user) return this.fallback.saveFocusGuardSettings(updates);
+
+      const current = await this.getFocusGuardSettings();
+      const updated: FocusGuardSettings = { ...current, ...updates, updatedAt: new Date().toISOString() };
+
+      const payload = {
+        user_id: user.id,
+        enabled: updated.enabled,
+        mode: updated.mode,
+        allowed_domains: updated.allowedDomains,
+        blocked_domains: updated.blockedDomains,
+        blocked_apps: updated.blockedApps,
+        unknown_site_policy: updated.unknownSitePolicy,
+        updated_at: updated.updatedAt,
+      };
+
+      const { data, error } = await this.client
+        .from('focus_guard_settings')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select('*')
+        .single();
+
+      if (error || !data) {
+        console.warn('Supabase saveFocusGuardSettings failed, using fallback:', error);
+        return this.fallback.saveFocusGuardSettings(updates);
+      }
+
+      // Sync fallback
+      await this.fallback.saveFocusGuardSettings(updated);
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        enabled: data.enabled,
+        mode: data.mode,
+        allowedDomains: Array.isArray(data.allowed_domains) ? data.allowed_domains : [],
+        blockedDomains: Array.isArray(data.blocked_domains) ? data.blocked_domains : [],
+        blockedApps: Array.isArray(data.blocked_apps) ? data.blocked_apps : [],
+        unknownSitePolicy: data.unknown_site_policy,
+        updatedAt: data.updated_at,
+      };
+    } catch (err) {
+      console.warn('Error saving Focus Guard settings in Supabase:', err);
+      return this.fallback.saveFocusGuardSettings(updates);
+    }
+  }
+
+  async recordAgentHeartbeat(heartbeat: FocusGuardAgentHeartbeat): Promise<FocusGuardAgentHeartbeat> {
+    try {
+      const { data: { user } } = await this.client.auth.getUser();
+      if (!user) return this.fallback.recordAgentHeartbeat(heartbeat);
+
+      const payload = {
+        user_id: user.id,
+        client_id: heartbeat.clientId,
+        client_type: heartbeat.clientType,
+        version: heartbeat.version || '1.0.0',
+        status: heartbeat.status || 'connected',
+        active_session_id: heartbeat.activeSessionId || null,
+        blocked_enforcements_count: heartbeat.blockedEnforcementsCount || 0,
+        last_action_log: heartbeat.lastActionLog || null,
+        error_message: heartbeat.errorMessage || null,
+        last_heartbeat_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await this.client
+        .from('focus_guard_agent_heartbeats')
+        .upsert(payload, { onConflict: 'user_id,client_id' })
+        .select('*')
+        .single();
+
+      await this.fallback.recordAgentHeartbeat(heartbeat);
+
+      if (error || !data) return this.fallback.recordAgentHeartbeat(heartbeat);
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        clientId: data.client_id,
+        clientType: data.client_type,
+        version: data.version,
+        status: data.status,
+        activeSessionId: data.active_session_id,
+        blockedEnforcementsCount: data.blocked_enforcements_count,
+        lastActionLog: data.last_action_log,
+        errorMessage: data.error_message,
+        lastHeartbeatAt: data.last_heartbeat_at,
+      };
+    } catch {
+      return this.fallback.recordAgentHeartbeat(heartbeat);
+    }
+  }
+
+  async getAgentHeartbeats(): Promise<FocusGuardAgentHeartbeat[]> {
+    try {
+      const { data: { user } } = await this.client.auth.getUser();
+      if (!user) return this.fallback.getAgentHeartbeats();
+
+      const { data, error } = await this.client
+        .from('focus_guard_agent_heartbeats')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (error || !data) return this.fallback.getAgentHeartbeats();
+
+      const cutoff = Date.now() - 45000;
+      return data.map(d => {
+        const last = new Date(d.last_heartbeat_at).getTime();
+        const isDisconnected = isNaN(last) || last < cutoff;
+        return {
+          id: d.id,
+          userId: d.user_id,
+          clientId: d.client_id,
+          clientType: d.client_type,
+          version: d.version,
+          status: isDisconnected ? 'disconnected' : d.status,
+          activeSessionId: d.active_session_id,
+          blockedEnforcementsCount: d.blocked_enforcements_count,
+          lastActionLog: d.last_action_log,
+          errorMessage: d.error_message,
+          lastHeartbeatAt: d.last_heartbeat_at,
+        };
+      });
+    } catch {
+      return this.fallback.getAgentHeartbeats();
+    }
   }
 }

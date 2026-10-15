@@ -170,6 +170,7 @@ export const DistractionModal: React.FC<DistractionModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

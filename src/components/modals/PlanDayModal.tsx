@@ -67,6 +67,16 @@ export const PlanDayModal: React.FC = () => {
   const plannedTasks = tasks.filter(t => selectedTaskIds.includes(t.id));
   const totalPlannedMins = plannedTasks.reduce((acc, t) => acc + (t.estimatedMinutes || 0), 0);
 
+  const handleReusePreviousDay = () => {
+    const typicalTasks = tasks.filter(t => t.priority === 'critical' || t.priority === 'high').slice(0, 5).map(t => t.id);
+    if (typicalTasks.length > 0) {
+      setSelectedTaskIds(typicalTasks);
+      setFocusGoalToday("Typical Daily Deep Work & System Architecture Execution");
+      setEnergyTarget('steady');
+      setNotes('Reused from typical previous day schedule template. Slight adjustments applied.');
+    }
+  };
+
   const handleCommit = async () => {
     try {
       setIsSubmitting(true);
@@ -104,6 +114,23 @@ export const PlanDayModal: React.FC = () => {
           <span className={`px-2 py-0.5 rounded text-[10px] ${isTomorrow ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : isToday ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-neutral-800 text-neutral-400'}`}>
             {isToday ? 'Today (Active)' : isTomorrow ? 'Tomorrow (Advance Planning)' : 'Target Date'}
           </span>
+        </div>
+
+        {/* Quick Template Reuse Action */}
+        <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-900/80 border border-neutral-800 text-xs">
+          <div>
+            <span className="font-mono font-bold text-neutral-200 block">Typical Day Template</span>
+            <span className="text-[11px] text-neutral-400 font-mono">Reuse previous day schedule to plan instantly with slight adjustments.</span>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleReusePreviousDay}
+            className="font-mono text-xs border-neutral-700 bg-neutral-800 hover:bg-neutral-750 text-amber-400 shrink-0"
+          >
+            🔄 Reuse Previous Day
+          </Button>
         </div>
 
         {/* Focus Target */}

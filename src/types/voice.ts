@@ -12,6 +12,7 @@ export interface VoicePreferences {
   rate: number; // 0.5 to 2.0
   pitch: number; // 0.5 to 2.0
   language: string; // e.g., 'en-US' or 'en-GB'
+  selectedVoiceURI?: string; // specific system voice URI
 }
 
 export type MicrophoneState = 'idle' | 'listening' | 'processing' | 'success' | 'error';

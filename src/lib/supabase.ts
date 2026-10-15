@@ -1,7 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Safe environment variable resolution (Vite client or Node server/test environment)
+// Safe environment variable resolution (Vite client, localStorage override, or Node server)
 const getEnvVar = (key: string): string => {
+  if (typeof window !== 'undefined') {
+    if (key === 'VITE_SUPABASE_URL') {
+      const stored = localStorage.getItem('nick_os_supabase_url');
+      if (stored) return stored;
+    }
+    if (key === 'VITE_SUPABASE_ANON_KEY') {
+      const stored = localStorage.getItem('nick_os_supabase_key');
+      if (stored) return stored;
+    }
+  }
+
   try {
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
       return import.meta.env[key];
@@ -32,12 +43,22 @@ export const isSupabaseConfigured = Boolean(
 let supabaseInstance: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
-  if (!isSupabaseConfigured) {
+  const url = getEnvVar('VITE_SUPABASE_URL');
+  const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+  const configured = Boolean(
+    url && 
+    key && 
+    !url.includes('your-project') &&
+    !key.includes('your-anon-key')
+  );
+
+  if (!configured) {
     return null;
   }
   if (!supabaseInstance) {
     try {
-      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      supabaseInstance = createClient(url, key, {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
@@ -51,8 +72,34 @@ export function getSupabaseClient(): SupabaseClient | null {
   return supabaseInstance;
 }
 
+export function saveSupabaseCredentials(url: string, key: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nick_os_supabase_url', url.trim());
+    localStorage.setItem('nick_os_supabase_key', key.trim());
+    supabaseInstance = null;
+  }
+}
+
+export function clearSupabaseCredentials() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('nick_os_supabase_url');
+    localStorage.removeItem('nick_os_supabase_key');
+    supabaseInstance = null;
+  }
+}
+
 export const SUPABASE_CONFIG_STATUS = {
-  isConfigured: isSupabaseConfigured,
-  url: supabaseUrl ? (supabaseUrl.length > 25 ? `${supabaseUrl.substring(0, 22)}...` : supabaseUrl) : 'Not configured',
-  hasAnonKey: Boolean(supabaseAnonKey && !supabaseAnonKey.includes('your-anon-key')),
+  get isConfigured() {
+    const url = getEnvVar('VITE_SUPABASE_URL');
+    const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
+    return Boolean(url && key && !url.includes('your-project') && !key.includes('your-anon-key'));
+  },
+  get url() {
+    const url = getEnvVar('VITE_SUPABASE_URL');
+    return url ? (url.length > 25 ? `${url.substring(0, 22)}...` : url) : 'Not configured';
+  },
+  get hasAnonKey() {
+    const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
+    return Boolean(key && !key.includes('your-anon-key'));
+  },
 };

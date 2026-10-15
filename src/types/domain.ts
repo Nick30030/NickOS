@@ -215,7 +215,7 @@ export interface DayPlan {
 // 6. EXECUTION SESSIONS (Stopwatch / Granular Focus Tracking)
 // ==============================================================================
 
-export type ExecutionSessionStatus = 'active' | 'paused' | 'completed' | 'abandoned' | 'postponed';
+export type ExecutionSessionStatus = 'active' | 'paused' | 'completed' | 'abandoned' | 'postponed' | 'disconnected';
 
 export interface SessionPause {
   id: string;
@@ -477,7 +477,14 @@ export type NavigationTab =
   | 'accountability'
   | 'analytics' 
   | 'settings'
-  | 'ai';
+  | 'ai'
+  | 'help'
+  | 'command'
+  | 'vision'
+  | 'objectives'
+  | 'execution'
+  | 'evolution'
+  | 'tools';
 
 // ==============================================================================
 // 11. AI PROPOSALS & BRAIN MODELS
