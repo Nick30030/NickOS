@@ -43,7 +43,7 @@ Apply the migration script located at `/supabase/migrations/20260930000005_focus
    dotnet build NickOS.FocusGuard.Agent.csproj -c Release
    dotnet run
    ```
-3. The agent will connect to `http://localhost:3000`, poll for active focus sessions, and monitor processes listed in your `blockedApps` settings.
+3. Set `ServerUrl` in `windows-agent/appsettings.json` to the same NickOS origin used in your browser, or run `dotnet run -- --server https://your-nickos-host`. Use `http://localhost:3000` only when NickOS runs on that same PC. The agent polls that server for active focus sessions and monitors processes listed in your `blockedApps` settings. See `windows-agent/README.md` for disconnected-session troubleshooting.
 
 ---
 

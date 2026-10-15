@@ -85,8 +85,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   syncBtn.addEventListener('click', () => {
     syncBtn.textContent = 'Syncing...';
-    chrome.runtime.sendMessage({ action: 'sync' }, () => {
-      setTimeout(() => window.location.reload(), 600);
+    syncBtn.disabled = true;
+    chrome.runtime.sendMessage({ action: 'sync' }, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error || !response?.ok) {
+        ruleReasonText.textContent = error
+          ? 'Extension worker unavailable. Reload NickOS Guard on the extensions page and reopen this popup.'
+          : 'Sync failed: ' + (response?.error || 'No response from the extension worker.');
+        syncBtn.textContent = 'Retry Sync';
+        syncBtn.disabled = false;
+        return;
+      }
+      window.location.reload();
     });
   });
 });

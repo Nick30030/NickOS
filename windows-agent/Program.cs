@@ -30,6 +30,28 @@ namespace NickOS.FocusGuard.Agent
             } catch (Exception ex) {
                 Console.WriteLine($"[WARN] Could not load appsettings.json: {ex.Message}");
             }
+            // An explicit URL makes it possible to match the browser's deployment
+            // without editing a generated build directory.
+            if (args.Length > 0)
+            {
+                if (args.Length != 2 || args[0] != "--server")
+                {
+                    Console.WriteLine("Usage: NickOS.FocusGuard.Agent --server https://your-nickos-host");
+                    return;
+                }
+                _serverUrl = args[1];
+            }
+            if (!Uri.TryCreate(_serverUrl, UriKind.Absolute, out var serverUri)
+                || (serverUri.Scheme != "https" && serverUri.Scheme != "http")
+                || !string.IsNullOrEmpty(serverUri.UserInfo)
+                || serverUri.AbsolutePath != "/"
+                || !string.IsNullOrEmpty(serverUri.Query)
+                || !string.IsNullOrEmpty(serverUri.Fragment))
+            {
+                Console.WriteLine("[ERROR] ServerUrl must be the NickOS origin, e.g. https://your-nickos-host (no page path or login token).");
+                return;
+            }
+            if (_intervalSeconds < 1) _intervalSeconds = 6;
             Console.Title = "NickOS Focus Guard - Native Windows Agent";
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("===============================================================");
@@ -68,6 +90,15 @@ namespace NickOS.FocusGuard.Agent
                         Console.ForegroundColor = isProtectionActive ? ConsoleColor.Green : ConsoleColor.Yellow;
                         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Session State: {sessionState.ToUpper()} | Protection: {(isProtectionActive ? "ARMED" : "PAUSED")} | Task: {taskTitle}");
                         Console.ResetColor();
+
+                        if (sessionState == "disconnected")
+                        {
+                            Console.WriteLine("  [SYNC] Server reached, but no fresh focus session is available. Open NickOS at the server address above, start/resume a focus session, and keep the app open. If a session is already running, check that the browser and agent use the same server address.");
+                        }
+                        else if (!isProtectionActive && sessionState == "active")
+                        {
+                            Console.WriteLine("  [SYNC] Session active, but Focus Guard is disabled. Enable it in NickOS Focus Guard settings.");
+                        }
 
                         string actionLog;
 

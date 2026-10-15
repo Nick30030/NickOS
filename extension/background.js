@@ -26,6 +26,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+// Register synchronously so popup messages can wake the service worker.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.action !== 'sync') return;
+  syncActiveSessionAndEnforce().then(sendResponse).catch((err) => {
+    sendResponse({ ok: false, error: err.message });
+  });
+  return true; // Keep the response channel open until synchronization finishes.
+});
+
 // Primary Sync & Enforce Loop
 async function syncActiveSessionAndEnforce() {
   try {
@@ -38,8 +47,7 @@ async function syncActiveSessionAndEnforce() {
     });
 
     if (!res.ok) {
-      updateEnforcementStatus(false, null, 'Server responded with status ' + res.status);
-      return;
+      throw new Error('Server responded with status ' + res.status);
     }
 
     const data = await res.json();
@@ -59,10 +67,13 @@ async function syncActiveSessionAndEnforce() {
 
     // Send Heartbeat back to NickOS
     await sendHeartbeat(sessionState, isProtectionActive ? 'enforcing' : 'paused');
+    await chrome.storage.local.remove('lastError');
+    return { ok: true };
   } catch (err) {
     lastActionLog = 'Sync error: ' + err.message;
     await chrome.storage.local.set({ lastError: err.message });
     await sendHeartbeat('disconnected', 'error', err.message);
+    return { ok: false, error: err.message };
   }
 }
 
