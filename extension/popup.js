@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncBtn = document.getElementById('syncBtn');
 
   // Load cached diagnostic state
-  const data = await chrome.storage.local.get(['latestSessionData', 'blockedCount']);
+  const data = await chrome.storage.local.get(['latestSessionData', 'blockedCount', 'lastError', 'serverUrl']);
   const sessionData = data.latestSessionData;
   const blockedCount = data.blockedCount || 0;
 
@@ -46,8 +46,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (sessionData && sessionData.settings) {
         const { mode, blockedDomains, allowedDomains } = sessionData.settings;
-        const isBlockedInBlacklist = mode === 'blacklist' && blockedDomains.some(d => domain.includes(d));
-        const isAllowedInWhitelist = mode === 'whitelist' && allowedDomains.some(d => domain.includes(d));
+        const matchesDomain = d => domain === d.trim().toLowerCase() || domain.endsWith('.' + d.trim().toLowerCase());
+        const systemDomains = [new URL(data.serverUrl || 'https://nickos.ai.studio').hostname, 'nickos.ai.studio', 'ai.studio', 'localhost', '127.0.0.1'];
+        const isBlockedInBlacklist = mode === 'blacklist' && blockedDomains.some(matchesDomain);
+        const isAllowedInWhitelist = mode === 'whitelist' && [...allowedDomains, ...systemDomains].some(matchesDomain);
 
         if (!sessionData.isProtectionActive) {
           currentDomainStatus.textContent = '🟢 Allowed (Protection Paused)';
@@ -64,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ruleReasonText.textContent = `Domain ${domain} is not in blocked list.`;
           }
         } else if (mode === 'whitelist') {
-          if (isAllowedInWhitelist || domain.includes('localhost')) {
+          if (isAllowedInWhitelist) {
             currentDomainStatus.textContent = '🟢 Allowed by Whitelist Rule';
             currentDomainStatus.className = 'status-text status-allowed';
             ruleReasonText.textContent = `Domain ${domain} is on your Whitelist.`;
@@ -81,6 +83,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (err) {
     currentDomainText.textContent = 'Unavailable';
+  }
+
+  if (data.lastError) {
+    sessionStatusBadge.textContent = 'Sync error';
+    sessionStatusBadge.className = 'badge paused';
+    currentDomainStatus.textContent = 'Protection state unverified';
+    currentDomainStatus.className = 'status-text status-blocked';
+    ruleReasonText.textContent = data.lastError;
   }
 
   syncBtn.addEventListener('click', () => {

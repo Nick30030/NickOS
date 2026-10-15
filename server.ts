@@ -11,7 +11,7 @@ import { ObservabilityService } from "./src/services/observability/Observability
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "5mb" }));
 
@@ -565,7 +565,26 @@ app.post("/api/focus-guard/settings", (req, res) => {
 });
 
 app.post("/api/focus-guard/session-sync", (req, res) => {
-  const { sessionId, taskId, taskTitle, status, startTime } = req.body || {};
+  const { sessionId, taskId, taskTitle, status, startTime, settings } = req.body || {};
+  const statuses = ['active', 'paused', 'completed', 'abandoned', 'disconnected'];
+  if (!statuses.includes(status) || (status === 'active' && !sessionId)) {
+    return res.status(400).json({ error: 'INVALID_SESSION_STATE' });
+  }
+  // An idle browser must not erase another browser's actual session or settings.
+  // Completion from the owning browser includes the last synchronized session ID.
+  if (!sessionId && serverActiveFocusSession.sessionId) {
+    return res.json({ success: true, ignored: true });
+  }
+  if (sessionId && serverActiveFocusSession.sessionId && sessionId !== serverActiveFocusSession.sessionId && status !== 'active') {
+    return res.json({ success: true, ignored: true });
+  }
+  if (settings && typeof settings === 'object') {
+    serverFocusGuardSettings = {
+      ...serverFocusGuardSettings,
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    };
+  }
   serverActiveFocusSession = {
     sessionId: sessionId || null,
     taskId: taskId || null,

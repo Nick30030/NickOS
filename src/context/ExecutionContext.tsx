@@ -265,6 +265,7 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     updatedAt: new Date().toISOString(),
   });
   const [focusGuardAgents, setFocusGuardAgents] = useState<FocusGuardAgentHeartbeat[]>([]);
+  const lastSyncedFocusSessionIdRef = useRef<string | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -510,38 +511,60 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [repo]);
 
   const handleRefreshFocusGuardAgents = useCallback(async () => {
-    const agents = await repo.getAgentHeartbeats();
-    setFocusGuardAgents(agents);
-  }, [repo]);
+    try {
+      const response = await fetch('/api/focus-guard/agents');
+      if (!response.ok) throw new Error(`Focus Guard agents: HTTP ${response.status}`);
+      const data = await response.json();
+      setFocusGuardAgents(data.agents || []);
+    } catch (error) {
+      console.warn('Failed to refresh Focus Guard agents:', error);
+      setFocusGuardAgents([]);
+    }
+  }, []);
 
   useEffect(() => {
+    // Wait for persisted sessions and settings before publishing initial state.
+    if (isLoading) return;
+    const controller = new AbortController();
     const syncSession = async () => {
-      let status: 'active' | 'paused' | 'completed' | 'abandoned' | 'disconnected' = 'disconnected';
+      let status: 'active' | 'paused' | 'completed' | 'abandoned' | 'disconnected' =
+        lastSyncedFocusSessionIdRef.current ? 'completed' : 'disconnected';
       if (activeExecutionSession) {
-        status = activeExecutionSession.status as any;
+        status = activeExecutionSession.status === 'postponed' ? 'abandoned' : activeExecutionSession.status;
+        lastSyncedFocusSessionIdRef.current = activeExecutionSession.id;
       }
       const activeTask = tasks.find(t => t.id === activeFocusTaskId);
       try {
-        await fetch('/api/focus-guard/session-sync', {
+        const response = await fetch('/api/focus-guard/session-sync', {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sessionId: activeExecutionSession?.id || null,
+            sessionId: activeExecutionSession?.id || lastSyncedFocusSessionIdRef.current,
             taskId: activeFocusTaskId || null,
             taskTitle: activeTask?.title || null,
             status,
             startTime: activeExecutionSession?.startTime || null,
+            settings: focusGuardSettings,
           }),
         });
-      } catch {
-        // quiet ignore
+        if (!response.ok) throw new Error(`Focus Guard sync: HTTP ${response.status}`);
+      } catch (error) {
+        if (!controller.signal.aborted) console.warn('Focus Guard session sync failed:', error);
       }
     };
 
     syncSession();
     const interval = setInterval(syncSession, 10000);
-    return () => clearInterval(interval);
-  }, [activeExecutionSession, activeFocusTaskId, tasks]);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [isLoading, activeExecutionSession, activeFocusTaskId, tasks, focusGuardSettings]);
+
+  useEffect(() => {
+    if (!isLoading) handleRefreshFocusGuardAgents();
+  }, [isLoading, handleRefreshFocusGuardAgents]);
 
   // Periodic agent check to trigger focus guard violation sounds
   useEffect(() => {
@@ -552,6 +575,7 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const res = await fetch('/api/focus-guard/active-session');
         if (res.ok) {
           const data = await res.json();
+          setFocusGuardAgents(data.agents || []);
           const currentTotalBlocked = (data.agents || []).reduce((sum: number, ag: any) => sum + (ag.blockedEnforcementsCount || 0), 0);
           
           if (lastBlockedCountRef.current > 0 && currentTotalBlocked > lastBlockedCountRef.current) {

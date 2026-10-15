@@ -10,15 +10,15 @@ let blockedCount = 0;
 let lastActionLog = 'Extension background service initialized.';
 
 // Initialize Extension Settings
-chrome.storage.local.get(['serverUrl', 'clientId', 'blockedCount'], (res) => {
+const initialized = chrome.storage.local.get(['serverUrl', 'clientId', 'blockedCount']).then(async (res) => {
   if (res.serverUrl) serverUrl = res.serverUrl;
   if (res.clientId) clientId = res.clientId;
-  else chrome.storage.local.set({ clientId });
+  else await chrome.storage.local.set({ clientId });
   if (res.blockedCount) blockedCount = res.blockedCount;
 });
 
 // Setup Alarms for periodic session sync & heartbeat
-chrome.alarms.create('focusGuardSyncAlarm', { periodInMinutes: 0.1 }); // every ~6s
+chrome.alarms.create('focusGuardSyncAlarm', { periodInMinutes: 0.5 }); // Chrome minimum: 30s
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'focusGuardSyncAlarm') {
@@ -36,14 +36,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // Primary Sync & Enforce Loop
-async function syncActiveSessionAndEnforce() {
+let pendingSync;
+function syncActiveSessionAndEnforce() {
+  if (!pendingSync) {
+    pendingSync = performSync().finally(() => { pendingSync = null; });
+  }
+  return pendingSync;
+}
+
+async function performSync() {
   try {
+    await initialized;
     const stored = await chrome.storage.local.get(['serverUrl']);
     if (stored.serverUrl) serverUrl = stored.serverUrl;
 
     const res = await fetch(`${serverUrl}/api/focus-guard/active-session`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -52,12 +62,9 @@ async function syncActiveSessionAndEnforce() {
 
     const data = await res.json();
     const { isProtectionActive, sessionState, settings, taskId, taskTitle } = data;
-
-    // Cache state locally for popup diagnostics
-    await chrome.storage.local.set({
-      latestSessionData: data,
-      lastSyncTimestamp: new Date().toISOString(),
-    });
+    if (typeof isProtectionActive !== 'boolean' || typeof sessionState !== 'string' || !settings) {
+      throw new Error('Unexpected API response. Check the NickOS server address in extension options.');
+    }
 
     if (isProtectionActive && settings && settings.enabled) {
       await applyDeclarativeNetRules(settings, taskId, taskTitle);
@@ -65,14 +72,20 @@ async function syncActiveSessionAndEnforce() {
       await clearDeclarativeNetRules('Protection inactive or session status: ' + sessionState);
     }
 
+    // Advertise enforcement only after Chrome successfully installs the rules.
+    await chrome.storage.local.set({
+      latestSessionData: data,
+      lastSyncTimestamp: new Date().toISOString(),
+    });
+
     // Send Heartbeat back to NickOS
-    await sendHeartbeat(sessionState, isProtectionActive ? 'enforcing' : 'paused');
+    await sendHeartbeat(data.sessionId, isProtectionActive ? 'enforcing' : 'paused');
     await chrome.storage.local.remove('lastError');
     return { ok: true };
   } catch (err) {
     lastActionLog = 'Sync error: ' + err.message;
     await chrome.storage.local.set({ lastError: err.message });
-    await sendHeartbeat('disconnected', 'error', err.message);
+    await sendHeartbeat(null, 'error', err.message);
     return { ok: false, error: err.message };
   }
 }
@@ -112,7 +125,7 @@ async function applyDeclarativeNetRules(settings, taskId, taskTitle) {
       }
     } else if (settings.mode === 'whitelist') {
       // Whitelist Mode: Block everything EXCEPT allowed domains and NickOS system origins
-      const systemDomains = ['nickos.ai.studio', 'ai.studio', 'run.app', 'localhost', '127.0.0.1'];
+      const systemDomains = [new URL(serverUrl).hostname, 'nickos.ai.studio', 'ai.studio', 'localhost', '127.0.0.1'];
       const allowedDomains = Array.from(new Set([
         ...systemDomains,
         ...(settings.allowedDomains || []).map(d => d.trim().toLowerCase()).filter(Boolean)
@@ -142,7 +155,7 @@ async function applyDeclarativeNetRules(settings, taskId, taskTitle) {
           }
         },
         condition: {
-          urlFilter: 'http*',
+          regexFilter: '^https?://',
           excludedRequestDomains: allowedDomains,
           resourceTypes: ['main_frame']
         }
@@ -158,6 +171,7 @@ async function applyDeclarativeNetRules(settings, taskId, taskTitle) {
   } catch (err) {
     console.error('[FocusGuard Extension] Failed to update dynamic rules:', err);
     lastActionLog = 'Rule update error: ' + err.message;
+    throw err;
   }
 }
 
@@ -174,21 +188,23 @@ async function clearDeclarativeNetRules(reason) {
     lastActionLog = 'Cleared rules: ' + reason;
   } catch (err) {
     console.error('[FocusGuard Extension] Clear rules error:', err);
+    throw err;
   }
 }
 
 // Send heartbeat pulse to NickOS server
-async function sendHeartbeat(sessionState, status, errorMessage) {
+async function sendHeartbeat(sessionId, status, errorMessage) {
   try {
     await fetch(`${serverUrl}/api/focus-guard/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
         clientId,
         clientType: 'browser_extension',
         version: '1.0.0',
         status: status || 'connected',
-        activeSessionId: sessionState === 'active' ? 'session_active' : null,
+        activeSessionId: sessionId || null,
         blockedEnforcementsCount: blockedCount,
         lastActionLog,
         errorMessage: errorMessage || null,

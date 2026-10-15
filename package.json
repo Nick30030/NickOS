@@ -8,9 +8,10 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
+    "test:focus-browser": "node scripts/test-focus-browser.mjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts && tsx src/tests/focus-guard.test.ts"
+    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts && tsx src/tests/focus-guard.test.ts && tsx --test src/tests/focus-guard-runtime.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -27,14 +28,15 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "playwright": "1.58.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "typescript": "^7.0.2"
   }
 }

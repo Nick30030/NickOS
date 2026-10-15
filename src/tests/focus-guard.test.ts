@@ -114,5 +114,6 @@ export function runFocusGuardTests() {
 
 // Execute tests if invoked directly
 if (typeof process !== 'undefined' && process.argv && process.argv[1]?.includes('focus-guard.test')) {
-  runFocusGuardTests();
+  const { failed } = runFocusGuardTests();
+  if (failed > 0) process.exitCode = 1;
 }

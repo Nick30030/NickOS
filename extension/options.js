@@ -7,11 +7,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (res.serverUrl) serverUrlInput.value = res.serverUrl;
   });
 
-  saveBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', async () => {
     const val = serverUrlInput.value.trim().replace(/\/+$/, '');
-    chrome.storage.local.set({ serverUrl: val }, () => {
+    try {
+      const url = new URL(val);
+      if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' || url.search || url.hash || url.username || url.password) {
+        throw new Error('Enter only the NickOS origin, e.g. https://nickos.ai.studio');
+      }
+      await chrome.storage.local.set({ serverUrl: url.origin });
+      const response = await chrome.runtime.sendMessage({ action: 'sync' });
+      if (!response?.ok) throw new Error(response?.error || 'Extension worker unavailable. Reload the extension.');
+      msg.textContent = 'Configuration saved. Server synchronization successful.';
+      msg.style.color = '#34d399';
       msg.style.display = 'block';
-      setTimeout(() => msg.style.display = 'none', 2500);
-    });
+    } catch (error) {
+      msg.textContent = error.message;
+      msg.style.color = '#f87171';
+      msg.style.display = 'block';
+    }
   });
 });

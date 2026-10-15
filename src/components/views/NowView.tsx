@@ -226,7 +226,16 @@ export const NowView: React.FC = () => {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => setFocusModeOpen(true)}
+            onClick={async () => {
+              if (!resolvedTask) return;
+              if (activeExecutionSession?.status === 'paused') {
+                await resumeFocusSession();
+              } else if (!isTimerRunning) {
+                await startFocusSession(resolvedTask.id, resolvedBlock?.id);
+              }
+              setFocusModeOpen(true);
+            }}
+            disabled={!resolvedTask}
             className="bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold shadow-lg shadow-emerald-500/20 whitespace-nowrap"
             icon={<Crosshair className="w-3.5 h-3.5 text-neutral-950" />}
           >
