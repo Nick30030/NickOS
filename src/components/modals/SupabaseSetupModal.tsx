@@ -8,9 +8,15 @@ import { SUPABASE_CONFIG_STATUS, saveSupabaseCredentials, clearSupabaseCredentia
 import { LocalStorageRepository } from '../../services/storage/LocalStorageRepository';
 import { SupabaseRepository } from '../../services/storage/SupabaseRepository';
 import { getTodayString } from '../../lib/utils';
+import { useAuth } from '../../context/AuthContext';
 
 export const SupabaseSetupModal: React.FC = () => {
   const { isSupabaseModalOpen, setIsSupabaseModalOpen } = useExecution();
+  const { mode, user, refreshSession } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [copied, setCopied] = useState(false);
   const [urlInput, setUrlInput] = useState(() => localStorage.getItem('nick_os_supabase_url') || '');
   const [keyInput, setKeyInput] = useState(() => localStorage.getItem('nick_os_supabase_key') || '');
@@ -41,6 +47,25 @@ export const SupabaseSetupModal: React.FC = () => {
     setUrlInput('');
     setKeyInput('');
     window.location.reload();
+  };
+
+  const handleSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Enregistrez d’abord l’URL et la clé publique de votre projet Supabase.');
+      const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
+      setPassword('');
+      await refreshSession();
+      window.location.reload();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Connexion impossible.');
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   const handlePushToCloud = async () => {
@@ -96,11 +121,11 @@ export const SupabaseSetupModal: React.FC = () => {
           )}
           <div className="space-y-1 text-xs">
             <p className="font-semibold text-neutral-100">
-              {SUPABASE_CONFIG_STATUS.isConfigured ? 'Supabase Active & Connected' : 'Running in Local Storage Mode'}
+              {SUPABASE_CONFIG_STATUS.isConfigured ? (mode === 'supabase' ? 'Supabase : compte connecté' : 'Supabase configuré — connexion requise') : 'Running in Local Storage Mode'}
             </p>
             <p className="text-neutral-400">
               {SUPABASE_CONFIG_STATUS.isConfigured
-                ? `Connected to ${SUPABASE_CONFIG_STATUS.url}. All records synchronize with your Supabase cloud PostgreSQL instance.`
+                ? `Projet configuré : ${SUPABASE_CONFIG_STATUS.url}. Les créations cloud nécessitent un compte connecté et les droits d’accès à vos données.`
                 : 'Enter your Supabase credentials below to synchronize your planned days and tasks across all your computers and devices.'}
             </p>
           </div>
@@ -143,6 +168,23 @@ export const SupabaseSetupModal: React.FC = () => {
             </div>
           </div>
         </form>
+
+        {SUPABASE_CONFIG_STATUS.isConfigured && (
+          <form onSubmit={handleSignIn} className="space-y-3 p-4 bg-neutral-950 rounded-xl border border-neutral-800">
+            <h4 className="font-semibold text-neutral-200">Compte Supabase</h4>
+            {mode === 'supabase' ? (
+              <p className="text-sm text-emerald-400">Connecté : {user?.email}</p>
+            ) : (
+              <>
+                <p className="text-xs text-neutral-400">La clé publique configure le projet. Connectez-vous avec un compte Supabase Auth pour enregistrer vos tâches et projets. Utilisez un compte existant ou créez-le dans Authentication → Users de votre projet Supabase.</p>
+                <Input type="email" placeholder="Adresse e-mail du compte Supabase" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required />
+                <Input type="password" placeholder="Mot de passe du compte Supabase" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+                {authError && <p role="alert" className="text-sm text-rose-400">{authError}</p>}
+                <Button type="submit" isLoading={isSigningIn}>Se connecter à Supabase</Button>
+              </>
+            )}
+          </form>
+        )}
 
         {/* Push Local Data to Cloud Migration Button */}
         {SUPABASE_CONFIG_STATUS.isConfigured && (

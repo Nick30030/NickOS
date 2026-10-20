@@ -8,10 +8,11 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
+    "test:creation-browser": "node scripts/test-creation-browser.mjs",
     "test:focus-browser": "node scripts/test-focus-browser.mjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts && tsx src/tests/focus-guard.test.ts && tsx --test src/tests/focus-guard-runtime.test.ts"
+    "test": "tsx src/tests/unit.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/e2e-journeys.test.ts && tsx src/tests/notification.test.ts && tsx src/tests/background.test.ts && tsx src/tests/focus-guard.test.ts && tsx --test src/tests/focus-guard-runtime.test.ts src/tests/creation-storage.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

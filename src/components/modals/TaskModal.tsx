@@ -208,6 +208,7 @@ export const TaskModal: React.FC = () => {
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <p role="alert" className="text-sm text-rose-400">{error}</p>}
         {/* Title Input with Quality Prompt */}
         <div className="space-y-1">
           <Input

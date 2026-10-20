@@ -1068,6 +1068,7 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const createTask = async (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newTask = await repo.createTask(taskData);
     await refreshData();
+    setTasks(current => [newTask, ...current.filter(task => task.id !== newTask.id)]);
     return newTask;
   };
 
@@ -1127,6 +1128,7 @@ export const ExecutionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const createProject = async (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'taskCount' | 'completedTaskCount'>) => {
     const newProject = await repo.createProject(projectData);
     await refreshData();
+    setProjects(current => [...current.filter(project => project.id !== newProject.id), newProject]);
     return newProject;
   };
 

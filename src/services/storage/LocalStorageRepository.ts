@@ -34,13 +34,22 @@ class SafeStorage {
   }
 
   setItem(key: string, value: string): void {
+    let storage: Storage | undefined;
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        window.localStorage.setItem(key, value);
-        return;
-      }
+      storage = typeof window !== 'undefined' ? window.localStorage : undefined;
     } catch {
-      // fallback
+      // Some embedded contexts deny access entirely. Keep a session-only store.
+    }
+    if (storage) {
+      try {
+        storage.setItem(key, value);
+        return;
+      } catch (error) {
+        if (error instanceof Error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+          throw new Error('Stockage local plein : enregistrement impossible. Exportez vos données ou libérez de l’espace avant de réessayer.');
+        }
+        throw new Error('Écriture dans le stockage local refusée. Autorisez le stockage pour NickOS dans votre navigateur, puis réessayez.');
+      }
     }
     this.mem.set(key, value);
   }

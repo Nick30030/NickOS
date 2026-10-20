@@ -147,6 +147,7 @@ export const ProjectModal: React.FC = () => {
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <p role="alert" className="text-sm text-rose-400">{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2">
             <Input

@@ -27,6 +27,21 @@ export class SupabaseRepository implements IExecutionRepository {
     this.fallback = new LocalStorageRepository();
   }
 
+  private async requireCreationOwner(): Promise<string> {
+    const { data: { user }, error } = await this.client.auth.getUser();
+    if (error || !user) {
+      throw new Error('Connectez-vous à votre compte dans Configuration Supabase avant de créer des données cloud. La clé publique seule ne suffit pas.');
+    }
+    // Projects/tasks reference profiles, not auth.users directly. Preserve an existing profile.
+    const { error: profileError } = await this.client.from('profiles').upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || user.email?.split('@')[0] || 'Nick',
+    }, { onConflict: 'id', ignoreDuplicates: true });
+    if (profileError) throw new Error(`Impossible de préparer le profil Supabase : ${profileError.message}`);
+    return user.id;
+  }
+
   // ============================================================================
   // 1. LIFE AREAS
   // ============================================================================
@@ -215,7 +230,9 @@ export class SupabaseRepository implements IExecutionRepository {
 
   async createProject(projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'taskCount' | 'completedTaskCount'>): Promise<Project> {
     try {
+      const userId = await this.requireCreationOwner();
       const payload = {
+        user_id: userId,
         name: projectData.name,
         code: projectData.code,
         description: projectData.description,
@@ -227,10 +244,10 @@ export class SupabaseRepository implements IExecutionRepository {
         life_area_id: projectData.lifeAreaId,
       };
       const { data, error } = await this.client.from('projects').insert([payload]).select().single();
-      if (error || !data) return this.fallback.createProject(projectData);
+      if (error || !data) throw new Error(error?.message || 'Supabase n’a retourné aucun enregistrement.');
       return this.mapDbProjectToDomain(data);
-    } catch {
-      return this.fallback.createProject(projectData);
+    } catch (error) {
+      throw new Error(`Création du projet impossible : ${error instanceof Error ? error.message : 'Erreur Supabase inconnue'}`);
     }
   }
 
@@ -302,7 +319,9 @@ export class SupabaseRepository implements IExecutionRepository {
 
   async createTask(taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
     try {
+      const userId = await this.requireCreationOwner();
       const dbPayload = {
+        user_id: userId,
         title: taskData.title,
         description: taskData.description,
         status: taskData.status,
@@ -324,10 +343,10 @@ export class SupabaseRepository implements IExecutionRepository {
       };
 
       const { data, error } = await this.client.from('tasks').insert([dbPayload]).select().single();
-      if (error || !data) return this.fallback.createTask(taskData);
+      if (error || !data) throw new Error(error?.message || 'Supabase n’a retourné aucun enregistrement.');
       return this.mapDbTaskToDomain(data);
-    } catch {
-      return this.fallback.createTask(taskData);
+    } catch (error) {
+      throw new Error(`Création de la tâche impossible : ${error instanceof Error ? error.message : 'Erreur Supabase inconnue'}`);
     }
   }
 
